@@ -1,0 +1,1787 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Onboarding & Exit Checklist Manifest</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+
+<!--
+  ============================================================
+  SETUP (one-time, ~5 minutes)
+  ============================================================
+  1. Go to https://console.firebase.google.com, create a free project.
+  2. In the project, click "Build > Firestore Database" > Create database
+     > start in TEST MODE (you can tighten rules later).
+  3. Click the gear icon > Project settings > scroll to "Your apps" >
+     click the </> (web) icon > register the app (any nickname).
+  4. Firebase shows you a firebaseConfig object. Copy those 6 values
+     into FIREBASE_CONFIG below, replacing the placeholders.
+  5. Save this file and host it anywhere (Firebase Hosting, Netlify,
+     your intranet, SharePoint, GitHub Pages). The link works for your
+     whole team, and everyone reads/writes the same live data.
+
+  PASSCODE (optional but on by default):
+  6. Find APP_PASSCODE further down in the script and change it from
+     "changeme" to whatever shared passcode you want your team to use.
+     Anyone who knows it can open the page; nobody else can. This is a
+     simple front-door lock, not bank-grade security — good enough to
+     keep this off random strangers' radar.
+  7. Firestore rules can stay open ("allow read, write: if true") since
+     the passcode is the gate here, not Firestore. If you ever want
+     stronger protection later, real accounts (Firebase Authentication)
+     are a drop-in upgrade.
+  ============================================================
+-->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
+<style>
+  :root{
+    --bg:#F7F6F1;
+    --panel:#FFFFFF;
+    --ink:#1E2230;
+    --muted:#6B7280;
+    --line:#E3E1D8;
+    --admin:#3F3B8C;
+    --admin-soft:#EDEBFA;
+    --it:#0E6E66;
+    --it-soft:#E1F3F0;
+    --stamp:#B8422F;
+    --danger:#B8422F;
+    --radius:10px;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:'Inter',sans-serif;font-size:15px;line-height:1.5;}
+  .wrap{max-width:960px;margin:0 auto;padding:32px 24px 64px;}
+  .banner{
+    display:none;
+    background:#FCEBEB;border:1px solid #F0999;color:#7A2A2A;
+    border:1px solid #E9B3AC;
+    font-size:13px;padding:10px 14px;border-radius:8px;margin-bottom:18px;
+  }
+  .banner.show{display:block;}
+  .masthead{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:3px solid var(--ink);padding-bottom:16px;margin-bottom:18px;gap:16px;flex-wrap:wrap;}
+  .masthead h1{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:26px;margin:0 0 4px;letter-spacing:-0.01em;}
+  .masthead p{margin:0;color:var(--muted);font-size:13px;letter-spacing:.02em;text-transform:uppercase;}
+  .btn-row{display:flex;gap:8px;flex-wrap:wrap;}
+  .btn{font-family:'Inter',sans-serif;font-weight:600;font-size:14px;border-radius:var(--radius);padding:10px 16px;cursor:pointer;display:flex;align-items:center;gap:8px;border:1px solid var(--line);background:var(--panel);color:var(--ink);}
+  .btn.primary{background:var(--ink);color:#fff;border-color:var(--ink);}
+  .btn:hover{opacity:.88;}
+  .btn svg{width:16px;height:16px;flex-shrink:0;}
+
+  .view-tabs{display:flex;gap:8px;margin-bottom:22px;}
+  .view-tab{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:14px;padding:9px 18px;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:var(--muted);cursor:pointer;}
+  .view-tab.active{background:var(--ink);color:#fff;border-color:var(--ink);}
+
+  .meta{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px;}
+  .meta label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:5px;}
+  .meta input{width:100%;font-family:'Inter',sans-serif;font-size:14px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--ink);}
+  .meta input:focus{outline:2px solid var(--ink);outline-offset:1px;}
+
+  .tabs-row{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;}
+  .dept-tab{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:15px;padding:10px 20px;border-radius:999px;border:2px solid var(--line);background:var(--panel);color:var(--muted);cursor:pointer;}
+  .dept-tab.active[data-dept="admin"]{background:var(--admin-soft);border-color:var(--admin);color:var(--admin);}
+  .dept-tab.active[data-dept="it"]{background:var(--it-soft);border-color:var(--it);color:var(--it);}
+  .type-tab{font-family:'Inter',sans-serif;font-weight:600;font-size:13px;padding:8px 14px;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:var(--muted);cursor:pointer;}
+  .type-tab.active{color:#fff;}
+  .type-tab.active[data-active-dept="admin"]{background:var(--admin);border-color:var(--admin);}
+  .type-tab.active[data-active-dept="it"]{background:var(--it);border-color:var(--it);}
+
+  .progress-row{display:flex;align-items:center;gap:14px;margin:20px 0 18px;}
+  .progress-track{flex:1;height:8px;border-radius:999px;background:var(--line);overflow:hidden;}
+  .progress-fill{height:100%;width:0%;border-radius:999px;transition:width .25s ease;}
+  .progress-fill[data-active-dept="admin"]{background:var(--admin);}
+  .progress-fill[data-active-dept="it"]{background:var(--it);}
+  .progress-text{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);white-space:nowrap;}
+
+  .panel{position:relative;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:6px;}
+  .row{display:grid;grid-template-columns:20px 36px 90px 1fr auto;align-items:start;gap:14px;padding:14px 12px;border-bottom:1px solid var(--line);}
+  .drag-handle{cursor:grab;color:var(--muted);display:flex;align-items:center;justify-content:center;margin-top:3px;}
+  .drag-handle:active{cursor:grabbing;}
+  .row.dragging{opacity:.4;}
+  .row.drag-over{border-top:2px solid var(--ink);}
+  .row.sub-row{padding-left:34px;background:var(--bg);}
+  .row.sub-row .drag-handle{visibility:hidden;}
+  .row.parent-header .item-text{font-weight:700;}
+  .row.parent-header .checkbox-slot{width:19px;}
+  .row:last-child{border-bottom:none;}
+  .row input[type="checkbox"]{width:19px;height:19px;margin-top:2px;accent-color:var(--ink);cursor:pointer;}
+  .code{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);padding-top:3px;}
+  .item-text{font-size:14.5px;padding-top:1px;word-break:break-word;}
+  .row.checked .item-text{color:var(--muted);text-decoration:line-through;text-decoration-color:var(--line);}
+  .row.checked .code{opacity:.5;}
+  .row-actions{display:flex;gap:4px;opacity:0;transition:opacity .15s ease;}
+  .row:hover .row-actions{opacity:1;}
+  .icon-btn{width:26px;height:26px;border:none;background:transparent;color:var(--muted);cursor:pointer;border-radius:6px;display:flex;align-items:center;justify-content:center;}
+  .icon-btn:hover{background:var(--bg);color:var(--ink);}
+  .icon-btn.del:hover{color:var(--danger);}
+  .icon-btn svg{width:15px;height:15px;}
+  .edit-input{width:100%;font-family:'Inter',sans-serif;font-size:14.5px;padding:6px 8px;border:1px solid var(--ink);border-radius:6px;}
+  .edit-actions{display:flex;gap:4px;margin-top:6px;}
+  .mini-btn{font-size:12px;font-weight:600;padding:4px 10px;border-radius:6px;border:1px solid var(--line);background:var(--panel);cursor:pointer;}
+  .mini-btn.save{background:var(--ink);color:#fff;border-color:var(--ink);}
+  .add-row{padding:12px;}
+  .add-toggle{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600;color:var(--muted);background:none;border:1px dashed var(--line);border-radius:8px;padding:10px 14px;width:100%;cursor:pointer;justify-content:center;}
+  .add-toggle:hover{color:var(--ink);border-color:var(--ink);}
+  .add-form{display:none;gap:8px;align-items:center;}
+  .add-form.open{display:flex;}
+  .add-form input{flex:1;font-family:'Inter',sans-serif;font-size:14px;padding:9px 10px;border:1px solid var(--line);border-radius:8px;}
+  .footnote{margin-top:18px;font-size:12px;color:var(--muted);}
+
+  .records-toolbar{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:center;}
+  .records-toolbar select, .records-toolbar input{
+    font-family:'Inter',sans-serif;font-size:13px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--ink);
+  }
+  .records-toolbar input{flex:1;min-width:160px;}
+  table.records-table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden;}
+  table.records-table th{
+    text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);
+    padding:10px 14px;border-bottom:1px solid var(--line);background:var(--bg);
+  }
+  table.records-table td{padding:12px 14px;border-bottom:1px solid var(--line);font-size:14px;}
+  table.records-table tr:last-child td{border-bottom:none;}
+  table.records-table tr.rec-row{cursor:pointer;}
+  table.records-table tr.rec-row:hover{background:var(--bg);}
+  .pill{display:inline-block;font-size:11px;font-weight:600;padding:3px 9px;border-radius:999px;}
+  .pill.admin{background:var(--admin-soft);color:var(--admin);}
+  .pill.it{background:var(--it-soft);color:var(--it);}
+  .status-pill{display:inline-block;font-size:11px;font-weight:600;padding:3px 9px;border-radius:999px;}
+  .status-pill.active{background:#FFF1D6;color:#8A5A00;}
+  .status-pill.completed{background:#E1F3E1;color:#1E6B2E;}
+
+  .session-picker{display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:18px;}
+  .session-picker select{font-family:'Inter',sans-serif;font-size:13px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--panel);}
+  .session-active{display:flex;gap:14px;align-items:center;background:var(--admin-soft);border:1px solid var(--admin-line, var(--line));border-radius:10px;padding:12px 14px;margin-bottom:18px;font-size:14px;}
+  .session-active strong{font-family:'Space Grotesk',sans-serif;}
+  .session-active .mini-btn{margin-left:auto;}
+
+  .item-cell{display:flex;flex-direction:column;gap:4px;}
+  .note-preview{font-size:12px;color:var(--muted);font-style:italic;}
+  .note-input{width:100%;font-family:'Inter',sans-serif;font-size:13px;padding:6px 8px;border:1px solid var(--ink);border-radius:6px;margin-top:2px;resize:vertical;}
+  .icon-btn.note:hover{color:var(--admin);}
+  .row input[type="checkbox"]:disabled{cursor:not-allowed;opacity:.4;}
+  .empty-state{padding:40px 20px;text-align:center;color:var(--muted);font-size:14px;}
+  .back-link{background:none;border:none;color:var(--muted);font-size:13px;cursor:pointer;margin-bottom:14px;display:flex;align-items:center;gap:6px;padding:0;}
+  .back-link:hover{color:var(--ink);}
+
+  #loginOverlay{
+    position:fixed;inset:0;background:var(--bg);
+    display:flex;align-items:center;justify-content:center;
+    z-index:100;padding:20px;
+  }
+  .login-card{
+    display:flex;flex-direction:column;align-items:center;
+    width:100%;max-width:300px;text-align:center;
+  }
+  .login-logo{
+    width:220px;max-width:70vw;margin-bottom:28px;
+  }
+  .login-logo img{width:100%;height:auto;display:block;}
+  .login-card h2{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:20px;margin:0 0 28px;letter-spacing:-0.01em;}
+  .login-card label{display:none;}
+  .login-card input{
+    width:100%;font-family:'IBM Plex Mono',monospace;font-size:20px;letter-spacing:.3em;
+    text-align:center;padding:14px 10px;border:1px solid var(--line);border-radius:10px;margin-bottom:14px;
+    background:var(--panel);
+  }
+  .login-card input:focus{outline:2px solid var(--ink);outline-offset:1px;}
+  .login-card .btn{width:100%;justify-content:center;margin-top:4px;}
+  .login-error{font-size:12px;color:var(--danger);margin:-4px 0 12px;display:none;}
+  .login-error.show{display:block;}
+  .login-forgot{background:none;border:none;color:var(--muted);font-size:12px;cursor:pointer;padding:0;margin-top:14px;text-decoration:underline;}
+  .signed-in-as{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:10px;}
+  .signed-in-as button{background:none;border:none;color:var(--muted);font-size:12px;cursor:pointer;text-decoration:underline;padding:0;}
+
+  #printArea{display:none;}
+  @media print{
+    body{background:#fff;}
+    .masthead .btn-row, .masthead p, .view-tabs{display:none;}
+    .meta input{border:none;padding:0;background:transparent;}
+    .tabs-row, .progress-row, .panel, .footnote, .records-toolbar, table.records-table, .back-link, .banner{display:none;}
+    #printArea{display:block;}
+    #printArea h1{font-family:'Space Grotesk',sans-serif;font-size:22px;margin:0 0 2px;}
+    #printArea .p-sub{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:#555;margin-bottom:16px;}
+    #printArea .p-meta{display:grid;grid-template-columns:repeat(4,1fr);gap:6px 16px;font-size:12px;margin-bottom:18px;border-top:1px solid #000;border-bottom:1px solid #000;padding:8px 0;}
+    #printArea .p-meta strong{display:block;font-size:10px;text-transform:uppercase;color:#555;}
+    #printArea .p-row{display:grid;grid-template-columns:20px 80px 1fr;gap:10px;padding:7px 0;border-bottom:0.5px solid #ccc;font-size:13px;break-inside:avoid;}
+    #printArea .p-row.p-sub{padding-left:24px;}
+    #printArea .p-row.p-header{font-weight:700;border-bottom:1px solid #000;}
+    #printArea .p-box{width:13px;height:13px;border:1.5px solid #000;margin-top:2px;position:relative;}
+    #printArea .p-box.on::after{content:"";position:absolute;left:2px;top:2px;width:7px;height:7px;background:#000;}
+    #printArea .p-code{font-family:'IBM Plex Mono',monospace;font-size:10px;color:#555;}
+    #printArea .p-note{font-size:11px;font-style:italic;color:#555;margin-top:2px;}
+  }
+</style>
+</head>
+<body>
+
+<div id="loginOverlay">
+  <div class="login-card">
+    <div class="login-logo"><img src="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD//gAfQ29tcHJlc3NlZCBieSBqcGVnLXJlY29tcHJlc3P/2wBDAAQDAwMDAgQDAwMEBAQFBgoGBgUFBgwICQcKDgwPDg4MDQ0PERYTDxAVEQ0NExoTFRcYGRkZDxIbHRsYHRYYGRj/2wBDAQQEBAYFBgsGBgsYEA0QGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBj/wAARCAFJAeADASIAAhEBAxEB/8QAHQABAAIDAAMBAAAAAAAAAAAAAAcJBQYIAQMEAv/EAF0QAAEDAwICBgMKBwoKCAYDAAEAAgMEBQYHERIhCBMxQVFhFHGBCRUiMkJScpGhsSM4YnR1s8EWF0NzgpKisrTSGCQzNjdTV2OD4Rk0RpSVo9HwRVV2wtPxZZPD/8QAGwEBAAIDAQEAAAAAAAAAAAAAAAQFAQIDBgf/xAA+EQACAQICBgYIAwcFAQAAAAAAAQIDBBEhBRIxQVFxYYGRobHRBhMiMjNCwfAUUuEVFjRicpLxIyRDgqLS/9oADAMBAAIRAxEAPwDv5ERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREARF8tdcrfbYOuuFbT0sfzppAwfasNpLFmYxcnglmfUi0ut1VwmjJAurqlw7qeF7/t22WCq9cMeiJFJarlP5uDIx9rios7+3jtmixpaHvavu0n2YeJKKKGpde4Wn8FjEp+lVgfc1flvSApwfwuLTD6FWD97Quf7Ttvz9z8iUvRrST/4u+PmTOiiik17xiQ7VtrulN5hrJAPqdv8AYtmtmqeB3VzWQ5DTwSO/g6sGA/0gB9q7QvKE/dmiNW0NfUVjOjLDlj4G4ovXBUQVMLZqeZksbuYfG4OafUQvYpJWNYBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREARN16asVRopBQmEVHD+DMwJYD57c9lhvBYmUsXgexz2MYXvcGtHMknYBajetScatBdFHUm4Tt5dXSfCAPm7sH2r5a3ArrfJePIMrqZ499/R6aIRxj1Akj6wvrodNMRo9i+3uq3j5VTIX/YNh9igTqXdTKnFRXFv6LEs6NOxp51puXRFYd7w8CN73qxkNwc6K39Ta4Ty/B7Pl2+kez2Ba5LVY/V1Rqbq/JbjKTzkdJE0n2niK6MprNaKNobSWujgA/1cLW/sX1iKNo2DGgeQCiS0ZWqPGrVx6svEsqenLegtWhQ1eUsH24N95zU+64RSxnq8RrqqTuNdcCGj1hgC1CRzXvJZwgEkgA77LsJ9NTyjaSCN48HNBWNq8VxquaW1dht02/aXU7N/r23XOroac1lNf24eBPtfSqlRbxpyz/nb8Tkd/asjbMUyK+0MlZZ7TNWwxO4HmEtJadt/i77/Yugblo9hNeD1NDPQPPyqWZw/ou3H2LT6zRO+WqrFfimTlk7Obet3hePLjZuD7Qoj0TWg/aWK6H5l3S9KrSrHCEtSX8yeHc+8h+vsV7tzzHX2e4UzvCWne39ikzGtDG3zDaW53G71lvrKlnWCA04IjG52Dg7Yk7bHu7Vkm5pqthewymwOutEztqGt5gfxke4/nBbziuqeJ5S5lPBW+hVruXotXsxzj+S74rvYd/JSbW0ttfVm3jwawIuldL6U9Sp28VqrbKDUl4ZdZGJ0f1HxepNViOQxSbH4sEzqZzvW127D7SspQ6l6k4o4Q53htXV0zTs6tpoeFwHiS3djv6KnDfdeNlZxsVT+FJx712M83P0hlcrC9oxqdOGrLtXka5i2d4xmMBdZLnHLMwbyUsnwJo/pMPP2jcea2RfM23UDK30xlFTtqNiOuETQ/Y9vwtt19KmQUkva2lHXdJzbopqPBvF9uC8AiItjiEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREARF81fcKS2UElZWzNiiZ2k958AO8rEpKKxk8jKTk8FtPoc4NaXOIAA3JPctRr8sqbhXOtOJU4rKkcpKt3+Rh89+//AN9q+QxXrN5OKUy22x78mDlJUD/0+z1rb7dbaK1ULaSgp2QxN7mjmT4k9581BVSpc/D9mHHe+XBdPYTdSnb/ABPanw3Lnx5dpjrFjxtTnVlZXT19xlG0lRK87AdvC1vYAs4iKZTpxpx1Y7CJUqSqS1pPMIiLc0CL4a+9Wm1sLrjcqWl27pZQ0/V2rV63VfDaMkMrpqsjup4HH7TsFxqXFKn78kusk0bOvX+FBvkmbsii6fW+yMdtDZrjIPFxY39pXzu11tbezH64n+NYo/7Stvzk5aB0g9lJ93mSyih2TXulb/k8YnP0qpo/+0r4Jtf6kA9Ti8Q+nVk/cxYelLZfN3PyO0fRrSUtlLvj5k4bAjbZabkul2H5OHyVNtbSVbufpVHtE/fxIHJ3tCjSXpAXvn1ePW9v0pnn9gXxu6QWTtPKyWj65P7y5VNI2lRass1yJ9r6N6YoS9ZRWq+iS8zbohqLpmPwpky7G4+3g/63TN8QDuSAO7cj6KkTHMosmV2dtyslayoi7Ht7HxO+a9va0qDG9IbJGu2lsNqePBr5Gn7ysNcNRLK6vOXY1S1WN5K0gT00QEtHXtJ+EH7bbHv3I+3mudO+pU/cliuD29T+jJ1b0cvLpf7ikozfzRwwf9UVs/qS5redSItAwbVjG8voYoZqqG3XbbaSineG8R8Y3H4wP1+IW/7q1p1I1I60Hijx11Z1rSo6VeLjJcfvMIiLcjBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBEXh72sYXvcGtaNySdgAgPnr6+mttvkrKuQRxRjcnvPkPErXKO01ORVrLxf4y2mbzpbeexo7nP8AEnw//S9FI92X5OaqQH3poHfgmHslk8T9/q28StyJDWkkgAcySq+GF49d/DWzp6X0cO3gTJY2y1V7729HRz49h44o4+FhLW7nhaOzfyC/SwFlqHXq51F5O/ojCaejB7wPjye0jYeQ81n1MpVFUjrLZuI9SDhLVe0L01NVTUdM+oqp44YmDdz5HBoHtK1LJ9QbfZeOkt4bW1reRAP4OM/lEdp8h9i0+DHsvzmqZXXWd9PSnm184LWgfkR/tP1qDX0ilL1VBa8ujYubLC30Y5R9bcS1IcXtfJGwXvVe10fFFZ6d1fIOXWvPVxD9p+z1rTZr9qHlri2hbW9QTtw0UZijHrf3/WpKsunuOWgNlfS+nVI59dVDi2Pk3sCz1yuNvstqfW18zKemiHMn7AB3nyC4Stbmsta4qaq4Lz/yTIX1pbtRtKOvLjLPsX+CFYNJ8urH9ZU+h0zncyZpy93t4QfvWp5HY47DXCj9+KG4TDfrG0vEREfAkjbfyCka43rMNQZXUWNUk1BaCeF1RIer6wflP8PyW7+azOPaSWS2hlReHe+dQOfA4cMLT9H5Xt+pV70fCt7NtF4fmf04l5DTFS1WvezWP5IpY9b3csSD6K0XW7ScFsttVWHv6iIuA9Z7As9DpZnNS0PFmEQ/308bT9W5XSUMEFPA2GnhjijaNmsjaGtHqAXsU2noOml7cm+7zIVX0wuG/wDSgkunF+RzVLo/nYbu23UrvJtUzf7Via3TPO6TcyY3VSAd8BZL/VJK6rTYeC6PQlDc33eRrT9Mr2LzjF9T8ziy4W24215ZcbfVUbvCohdH94WNf2gruGaCGohdDURMljd2skaHA+wrSL9pDhF945PesW6od/DUB6rn5t+KfqUapoWS+HLHmXdn6cUm8Lmm10rPuy+py3baSjrrxBSV9zjtsEh2dVSxukbH5kN5+1Syzo8zVlHHU0GZ0dRFKA5kjaUlrh4gh53Xx5JoLklAXT2Crgu0I5iJ20Mw9h+CfrHqWrY/mOZ6YXk0j4KiGEu3ltlcxzWP8S3f4p/Kb7d1Hp0Y0JatzTy45/TIuq97W0hBVNEXK1l8rSz7VivDkbv/AINdY+P4eXQB3bsKIkf11sdjw3V7CY2stGT2u/UDOy33EyM5eDHniLfr28lueEaiY/nNAXW6YwVsbd5qGYgSR+Y+c38oe3ZbcrujaUMFOll0ps8Hfae0nrO3vkpYbYyjHyT60+TNOpc/p6VzKfL7XV4zUE8PHW7PpXn8mobuz+dwnyW2wzw1EDZoJWSxvG7XscHNcPIjtSaGGogfBPEySN44XMe0Oa4eBB7VGd50xr7LWvv2l11dY64HjktT3E0FV+SY+xhPPmOXq7VIbnBcfH77CrpQtbmWq36t9OcfOP8A66cCUEWmYZn9LkcslmutI+zZLSjartNSdnj8uM/wkZ7QR7Vua6QmprFES4t6lvN06qwf3muKe5rJhERbHAIiIAiIgCIiAIiIAiIgCIiAIiIAiIgCIiAIiIAiIgCIiAIiIAiIgCIiAIiIAtPzO6TPdDj9B8KepIEgHgTyb7e/yHmtqq6mKjoZaqY7RxML3exaRiUEt2yirvtWNyw/B37nO7vY371V6RquTjawec9vQt5Os4KOtXlsj47jb7PbIbRZ4aGLnwD4TvnOPafrWFzO4TMoILLQn/G7i/qW7Hm1h5E/s+tbQtFtkzLzqVXXWR49Ft8ZZG5x+CO0b/1yt7xqnThb08tbLkt/cLVa05Vp56ufXu7zb6WnpbTZ4qdrmx09PGG8TjsAAOZP3qPb9ltyyO4+8WLsk6t5LXTN+C6Qd53+Szz7SvkyjJKvJbkyz2gPNK54Y1reRqHdxPg3y9pW9YvjVNj1r4BwyVcgBmm8T4DyH/NRHWlez9RbvCmtrW/oX3+syNKNnD19dY1HsT3dL+/0x2N4DbLO1lVXNZW1w58ThuyM/ktP3n7Ft6Irahb06EdSmsEVde4qV5a9R4sLGXOw2281VNNc4PSW05Lo4ZDvHxH5Rb3nu5+ayaLpKKksJLFHOE5QetF4M/LGMjjayNjWtaNg1o2AHkv0iLY1CIiAIiIAiIgC+C62W03ygdRXi3U1bTu/g52BwHmPA+YX3osNJrBm0Zyg1KLwaIJynQ+vtFeMh03uM9PVwO6xlHJJs5p/3ch/qu5Hs3Wyac6sNv8AXfuXyun968khPVmORvVtqCO3YH4r+8t7+0b90pLRtQtNLVnFAKhjvQL1TjipbjENnNI5gP25lu/tHaFDds6T16HWtz8meihpeF/BW+k88Pdn80ef5o8d/DM3lFpOnOR3i5WypsOVQGDIrS8Q1YPZOwj4E7fFrgDzHeD2di3ZSoTU46yKK5t5W9V0p7Vw2Pg10NZo1DPNPLNndqYyrL6O5U4Jo7lT/Bmp3eRGxLfFu/1HmoMfqHn2l12ixnPJa2t9DqWVVHXNeXiqg34ZIy4/HYWOcRv8Jj2t3XUS13M8KsedYzJZr3T8bT8KGdnKSB/c9h7j9h7CuFag5e3TeEvHmXWh9MU6OFtfQ16PfHpi/FbGZqirKa4W2nrqKZs1PPG2WKRvY9rhuCPWCvoUQ6Z1d20/uzdLcwlDmEvfYblttHWRb7uh3+TI3ffhPceW4A3l5dqU9eOL27ys0hZ/hazhF60HnGW6Udz81ueKeaCIi6EEIiIAiIgCIiAIiIAiIgCIiAIiIAiIgCIiAIiIAiIgCIiAIiIAiIgCIiA1HPLgYbZDb2O2dO7if9Fv/Pb6l7MEp6mGxzSTNLY5ZeOIHtI2AJ9XJfBU0wyDUd8EnwqalADx4hvaPa47LeGta1oa0AAcgB3KktKUri8ndN5R9ldW0sq1RUreNBbXmz4L5Wm3Y7WVgOzo4jw/SPIfaQobFyqIbNNbYnBkU0gfM4dsmw5A+XaVImoVa2HH4qIO+HUSg7fkt5n7dlqmH2AXq9GWpbvSU2zng9j3dzfV3n/moGlpVK95GhSeeGHbt7ix0YoUbaVaossfDZ3my4HjYoqQXmsj/wAZnb+Ca4c42Hv9Z+5bsvAAA2HYvK9Fa20LemqcNxR3NxKvUdSe8IiKQcAiIgCIiAIiIAiIgCIiAIiIAiIgPx1MXX9f1bOt4eHj2HFtvvtv4L9oiAIiIDV9QMQgzXCKm0GU09Y0ieiq2nZ1NUM5seCOY58jt3ErXtIs+rcrslZZMji9Hyeyy+i3CEjYv23AlA89iDty3HgQpJUV5djsuN6z2HUmzRlsVXKy03uNnY+OUhkcx+i/gBPhw+BXConGSqLr5foXej6kLi3nY1tucoPhJbY8ppYf1YdJKiJ3Iu5SBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAX5keI4nSO7Ggk+xfpfBe5eox2tlB2IhcB7RstKs9SDnwRtGOtJIwOERmZlfcnjd00225/nH+stsJABJIAHeVg8Qg6nEqc98hc8+0n9gC/OYXE2/F5gx20s/4Fnt7T9W6r7SStrGM5blj25kqtF1rlwjveH0I7ya7G8ZBNUNdvCz8HCPyR3+07lSBhFG2lw+nk22fUEzO9p2H2AKKH8gfUpqscYixm3sHdTx/1QqbQTda5qVp7cPFlvpdKlbwpR2eRkERF6w84ERa3nudY3ptp9cszyyuFJa7fH1kjgN3vJOzY2N+U9ziGgd5PcNygNk3ATdVQar9OTWDOr1UQ4jc5MMsQcRDT24j0l7e50k+3FxeTOEDz7VD9PrnrRTV3pcOrOaibffiN6qCPqL9kBd/29iKrTSjp7aq4hdoKTUB7MyshIbKZWMirYm+LJWgB5Hbs8Hfs4h2qybAs9xfUvAqHMMPubK+11jd2PA2dG4fGje3ta9p5Fp+4goDZOIeITib4hVwdLvU/XrSDpG1lvsWpF9pMeusDLjbYmlhbE13wZIgS35MjXbDua5qg63dLbpBUd3payfUy81cUMzJX08pj4JQ1wJY74PYdtj60Bciix1gvNFkeK23ILa/rKO40sVZA/50cjA9p+pwX2VNTDR0ctXUytihiYZJJHHYNaBuSfUAUB7OIeITib4hU+ZV0utdLlnN5uNk1HvNvtlTXTTUlHFwBsELpCWMG7d9g0gexSb0XtXNf9W+kxYcauWpt+qLNTudcbmziZs6ni5ljtmdj3ljD9NAWbkgdpXjib84fWudumlnOXae9Gpl/wAMv1VZrn7700BqaUjiLHNk4m8weR2H1Ku8dK3pDlwH7619+uP+4gLmk3C4hvfTWp9POi1hTIqhmVaj3SzRVE4qH7xUrjuOtqS3YlxI3EY2JHMlo2340ynpKa65fdZK66aoZHBxOLhBbax1FCzybHCWj7z5oC6ndFThgHS112wG8wVMedXG+0THDrbffpXVsUrd+beJ5L2etrgVaXopq/j+tmktFmliYad73GCtoXv4n0dQ0DjjJ7xzDmu5btcDsOYAEiIihXpBdJPDdBMcjNxY665HWRl9BZYJA18g326yV3Pq49+W+xJIIAOx2AmrcL8SRxysLJWNe09rXDcFVC530z9fM2uEr4Mvkxqic4mOisLRTBg7vwvORx8y72BR5BrlrPTVoq4dWM1EoO/Eb1UEfUX7IC8AbbckVXGkfT21PxG709FqM8ZjYiQ2R72MiroW/OZI0ASEdvC8c+ziHarKcLzPHNQcGt2X4nco7habhF1sE7OXkWuB5tc0ggtPMEEIDPLxxN+cPrWNyOompcQulTTyOjmio5nse3ta4RuII9oVPH+Fb0hxyGq1+7PnR/3EBc1uD2LxuFX1iHTbuWIdDSC4Xy5fun1FqLnVUVLHWuB4I2hjxPOG7HgaJA1oGxcRtvsHEcq5L0itb8rvrrtdNUMmjmLy9kdDXPpIY/oRxFrR9SAuwRcddA/U7VrUnHcndneQSXqzWt8FPR1VYwOqTM4Oc9plGxe0NDSeLc7vHNSj0j+kxjOgWNwwvp23fKa+MuoLS2ThAaOXXTOHNsYO4G3NxBA7CQBOm4TcKmrNelhr3nFxlqKvUK6Wmnefg0VjkNDFGPmjqyHO9bnE+ax+K9JrXjD7iyrtmp+Q1Ia7iNPc6p1dE/xBZNxDn5bHzQF0vZ2rxxN+cPrVfty6dk+X9ErJomTjFNS6RlM2lko3fgqtrqiMSSQcW/C4M4uJjt9gdwTz4eaR0rekMXAfvrX7t+dH/cQFzO423Xjib84fWop0CvN8zfolYneMgvVZUXa52omouPEBNxuc9vGDttxDlty7gq3M56QHSZwPUi+YbdtVL8Ky01stHIT1YD+BxAePgdjhs4eRCAt5BB7CF5VX/Rn6U2qlw6T+L2TPs8uV2sd1ndbpKerLOESStLYnDZo59ZwD1Eq0AdiALxxN+cPrUYdInUCfTLozZdl1FU+j3CCiMFDINuJlRM4RRuAPaWufxfyVVr/hW9IfflqtfdvXH/cQFzIIPYQvK4p6C2Zawan3XJstzzObvd7Jb42W+lpakt6uSpeQ97uTRzYxrR2/wq7WQBERAEREAREQBERAEREAWFyt/BiVV+Vwt+twWaWAzHf9y0n8Yz71D0g8Lao1+V+B3tljWhzR99jYI8boWj/UNP2brStQK3rbxT0TT8GGPjI/Kd/yA+tbnYJOtxiheD/AtH1cv2KMMiqTVZPXTb7jrS0epvIfcqfS9bVsacI/Nh2YY+RY6Np611KT3YmGkBEZJBAIOx8VN9rHDY6Np7oGD+iFH2V2tlPh1lqmM4eCERP2/Kbxffv9akO3kG00pH+pZ/VCaFtnb1qkJcI9500pXValCS4vuPpREXpCjCr790kzSvFww3T2CZ0dEYpbxUxg8pX8XVRb/RAl/nKwRcG+6KaWX+7QY/qnaKSWrobbTOttzEbS40zDIXxSkD5BLntLu48PigOFMExC4Z9qXYsLtcsUNXeK6KiilmPwIy9wHE7bnsBueXPku77h7mvYXY9w2rVC4tugZ/lKm3Ruge7b5rXBzQfWSPNV60lXV0FfDW0NTNS1UD2yxTwvLHxvB3DmuHMEHYghdM4J08dc8SihpL1WW3LaOMcO12g2n4f46MtJPm4OKAjfJujjq3jOtselj8VqbjfahvW0noAMkNVDvt1zJDsBGO9ztuHsdsrH+ih0drzoLhVeL/lM1wud46uWpttM7/EqR7QQODcbuk2Ozn8gQANuQK0nTTp+6UZbcYKTOLRV4ZcXgRirlIqqTn2gytAewEgfGZw+JXW1DXUVzt0Fwt1ZBWUk7BJDUU8gkjlYRuHNcORB8QgOV+n1pn+7Do6R5jQ0/HcsVqPSnFo3caSTZkw9h6t/kGOVWXYfUr7r3aLfkGN3CxXWBtRQV9NJSVMTux8b2lrh7QSqOdSMKr9OdWMgwi57motNbJS8ZG3WMB+BIPJzC1w8nIC0PoN5yMx6I9qt88wfWY9US2iXc8+BpEkR9XVyNaPoFbP0s82/cJ0RcvuEMxirK6lFqpdjsS+oPVnbzDDI7+SuRvc4s1979VspwWom2iu1vZXQNceXW079iB5lkpP8hbN7pHnPwcO03p5f9Zeqtm/rhh//AN/sQFf57VZH7nRpz71aa5BqZWwbVF5qBb6J7hz9HhO73DydKdv+Eq5rbb6y7XmktdugdPWVczKeCJva+R7g1rR5kkBXkaY4TR6caP45g9DwmO00MdM57eQkkA3kf/KeXu9qAgH3QX8Udn6dpP6sqqrVqnugv4o7P07Sf1ZVVWgN/wBIdH8y1q1CixTEKRheG9bV1s5LYKOLfYySOAPfyAG5J5Adu3Umbe5zXyyad1F3xPPmX690sBmdbZrf6O2pLRuWRPEjtnciAHDYnbmN1PHQGxqy2rokUN/oaNkdxvVbUy11R2ulMUz4o27/ADWtbyHi5x7yuondntCAoDc0tcWuBBB2IK7a9zgy6opNWMrwiSZ3otwtjbiyMnkJYJGsJHgS2Y7/AER4LkrUaCKl1gyulgYGRRXisjY0dgaJ3gBT90ASR0v4QCRvZqwHz5MQFoWV5JbcPwa75VeJOroLVRy1tQ4dvBGwuIHmdth5kKkTUnUC/aoan3fN8jqHSVtxnMnBvu2CPsZEzwaxuzR6t+0lWh9Oe/T2ToaX2np3ljrpV0lvLh810okcPaIiPaqke07oCbujt0a8o1/ySqFHWMs+PW9zRXXaWIycLncxFEzccchHPtAaOZPMA9V373NvEnY5IMZ1EvUN2DCWPuVPFJTvd4FrA1zQfEF23gVBehvTMqtENIafBrZpvQXLgqZqqeukuD4XTySO7S0RkDZoY3t7GhSR/wBJZfv9k9t/8Xk//EgOMM0w6/YBnt0w7J6M0l1tk5gqIt9xv2hzT3tcCHA94IK639z01Yq7NqjcNKLjVOdbL3E+soY3O5RVcTd3ho7uOJrt/ONq56161h/fx1VbnEmL01gqHUUVJPDBUGcTOjLtpC4tbz4XNbtt2MC9HR8vMth6VGn1yieWkX+khcR8ySURuHta8hAXPZV/mNefzGf9W5UMnt9ivlyn/MW8/mM/6tyoaPb7EBlsXxi/Znl9vxfGLbNcbtcJhDTUsI+E9x8zyAABJJ5AAk7ALrJ/ucuqoxVlbHl2LOupYHut5dMGDl8UTcGxPd8XbzWV9zcslrrNTc0vlTRxy19Bb6eGlmcNzE2WR/WcPgSI2jft23HeVZAgII6PuBN6O/RHbT5gIqOso46q9Xt8T2yNY7m47OB2dwxRsby7wqqNUtQ71qpq1es5vkrjUXGoL44i7cU8I5RxN8mNAb7Ce0lWjdN3JJsd6GmRx0z+rmuktPbA4fNklDnj2sY8e1VE9p3QG16d6c5dqnntLiGF2t1fcqgF5BcGRwxjbikkeeTWDcbk+IA3JAPVFR7m/qRHj5qKfO8YmuYZxeiGOdkZd80S8P2lqlr3OfCaO3aMZBncsDDcLtcjRMkI5tgga07A9wL5Hk+PC3wXaKAolzrAss01zaqxPNLNPa7pTbF0Umxa9p7HscOT2HY7OBI7fArXG/HHrVknukVmtb9HMSyF1DCbpDejRMqtvhiF8Ej3M37wXRsPkRy7Sq22/HHrQFzXRT/E20+/RY/WPXHPuiWmfvLqnZtTaCDalvsHoVa5o5CqhHwXE+LouEf8Irsbop/ibaffotv6x6/fSf00/fU6MeSY9Twdbc6eH3ytoA3d6RCC8NHm9vHH/LQFNVur6q13eludDKYqqlmZPDI3ta9rg5pHqICvSwHK6TOdL8fzGiLepu9vhrQ1vyC9gcW+sEkexUSnk5WpdAHNf3R9Fg47PKXVOOXGajDSdz1Mn4aM+rd8jR9FAaN7pBm/oeA4lp/TzbSXCskudSxvb1cLeBgPkXSuPrYq5R2robpr5z+7Xpe36KCbrKOxMjssGx3AMQJl/wDNfIPYtR6NenX76HSbxbGJ4DLb21IrrgNtx6PD+EeD5O4Qz1vCAtE6LmnP72PRcxixVEHVXKqg987gCNndfPs8td5tbwM/kKYl4A2Gy8oAiIgCIiAIiIAiIgCIiALCZbHx4nUkfJLXfU4LNr47tTel2SqpgNy+JwHr25fao93D1lCcFvT8DpRlq1Iy4NGHwyrEmL9W53One5pHl8YfeozncZZ3u73uJ+srY8burLea6GZ4YyancW7n5bQdh7dyFgKaPrbhTRbb8UjG/WQvFXVz6+3oQW1YrwS7j0ttS9VVqyex4MkrKLf6Rgc8DW7ugjbI3+Rtv9m6+3GqkVWJ2+YHf8C1p9Y5H7lkpI2ywujeN2uBaR4grWMLc6kjuFimP4SiqCG797Hcwf8A34r10o+ruoy3SWHWs13YlFF69vKP5Xj1PJ9+BtSIinkML1zwQVVLJTVMMc0MrTHJHI0Oa9pGxBB5EEctl7O5cG9LfphZfieX3XSfT+3VmP1tIRFW3yqZwzuDmhw9Fb8lpaQRKeZ3+CG7boCQ9Sugbo/nVVUXTD6qqw2ve53Ey3Bs9Hx9+8DiODn3Mc0DwXLWd9ATWvFopavHDacupGDiDbfN1NRt5xS7Anya5xWudHjpZZhohdauiuMMuS41cJzU1VDUTkTRzO+NNFId9nO+UHbh23cea68qPdEdFG466rp7Jl0tcWbtoXUkTPheBk60tA8+fqQFY1xt1ws93qLXdaKooa6mkMU9NURmOSJ4Oxa5p5gjwK7d9zx1avcWc3LSK5VktRZ6ikkuNujkdxeizMc3rGM8Gva4uI7OJm4+Md+StVtQ6/VbWO/agXKihop7rOJPRoTu2JjWNYxu/wAohrGgu5bnc8t10h7nbiNbdekNd8s6l3oFmtL4nS7cuunc1rG/zGSn2ICzxVye6L6Z+92cWDVSgp9oLrF72XBzRyFREOKJxPi6Pib/AMJWNqLOkXpq3Vfo35LiUUAkuJpzV27lzFVF8OMDw4iCw+TygKpejlmbsB6UmFZGZDHAy5R0tS7fYCGfeGQn1NkJ9izHSvzg570tsvuUc3WUlDV+9NLsd2iOn/BEtPg57Xu/lKGSJIZtvhMew+otI/avD3vlldJI9z3uO5c47kk95KA6W6DOnJzjpT0N5qoOO3YxC66ylw+CZgeCBvr43cf/AAyrZu5cpdATTn9yPRrfltXBwV+U1RqwSNnCmi3jhB8ietePJ4XVqA5V90F/FHZ+naT+rKqq1ap7oL+KOz9O0n9WVVVoC3HoL/iSYv8AnFd/a5F0Y7s9oXOXQX/Ekxj85rv7XIujXdntCAos1O/02Zh+m63+0PU89AL8b+D9D1n3MUDanf6bMw/Tdb/aHqeegF+N/B+h6z7mIDrjp+2+at6H1RURNJZQ3ijqJD4NJfH98jVVIOZ2V5mrGC0+pmiuS4LUPaz31oXwRSO7I5fjRPP0XtYfYqQr3ZrnjuSV9ivNJJR3GhnfTVNPINnRyMcWuafUQUB1jpV0EqrVPR2w5/QapUdHDdqczejG1OlMLg5zHMLhKNyHNI32C3H/AKNK7/7XaL/wV/8A+ZRn0XOl5U6IWybDsrtVVeMTmmNRD6I5vpFBI7bjLA4gPY7bcsJGx3IPMg9W13ug2g1NbXVFNFlNbNw7tpo7c1jifAudIGj6ygIam9zZr6aLrKnWS2wsLms4pLO5o4nENaNzP2kkAeJIWy4H7npXYhqljmWVWp9JXwWi509wfSNtDozMIpGv4OIynh34dt9iucukX0sMt11qIbPS0hx/FaWUTRW2KXjknkHxZJ3jbiI7mgAN335nYqYeh/0ptWbpqFZtJr5QVOaUFSerjrZJNqu3RNG7pHynlJE0dof8LsAcTs0gWA5V/mNefzGf9W5UMnt9ivmyr/MW8/mM/wCrcqGT2+xAd2+5p/516h/mlD+smViCrv8Ac0/869Q/zSh/WTKxBAcoe6FQyy9EmmfG0lsWQUr5Nu5vVzN+8hVYK6/pC6dS6qdG7KcNpIw+4VFL19CDy3qYnCWNu/dxOZw7+DiqVKiCalqpKaoifDNG4sfHI0tcxwOxBB7CDy2QFpvufd5orh0T32yCRvpNtvFTFPH3jjDJGn1EO2/kldWqmbo69IXINAM+nudHSe+ljuLWxXO1uk6vrQ0ngkY7Y8Mjd3bEgghxB7QR2ncfdGtIobAKi14pl1XcS3cUk0UEDA7bsdL1jth5hp9SA+f3SGaEaAYrTGVgmfkIe2MuHE5raaYOIHeBxN3PmPFVoN+OPWpL1t1vy/XTUD90mUPjp6enaYbfbKcnqaOInchu/NzjyLnnmSB2AACNG/HHrQFzXRT/ABNtPv0W39Y9TGexQ50U/wATbT79Ft/WPUxoCmvpWaZ/vW9KLIbPS0/U2q4Se+1uAGzRDMS4tb5MeJGfyQpD6D2rNLprl+dw3WXa3zY7PdQwu2D5qMGRrR5ljpR7AuhvdDNMv3QaNWvUegpuKsxyo6irc0czSTkN3PjwyhnqD3Ks+OWWJxMUj2EtLTwnbcHkR6kB9N2udZer/W3i4SmWrrZ5KmeQ9rpHuLnH6yVYJ7nHpz6JjWT6o1sG0lbKLPQOcOfVx7STOHkXmNv/AAyq9KamnrK2KlponzTzPEccbBuXuJ2AA8SSArwNG8Bg0w0KxjB4WMEltoWMqHN7H1DvhzO9sjnlAbyiIgCIiAIiIAiIgCIiAIiIAiIgIlyGh978hqacN2ZxcbPou5j/ANPYvms7Osya3s233qGf1gtxz238dJT3JjecZ6qQ+R7Pt+9afZXiPKLe93YKhn37LwN3bfh77U3Yp9TZ6q3rettdbfgyYlql2HvLnNDevi09YPQ6k9wd8hx/99y2tfBebXFeLJUUEp4esb8F/wA1w5g+wr2t1SdSHs+8s1zXnsPOW9RQn7Wx5Pk/vE+9FicerairszY61pbW0zjT1DT89vf6iNj7Vll2pzVSKkt5ynBwk4vcFz50nejBZte8dhuNuqILTmNvjLKO4SNPVzx779RPtz4NySHDctJPIgkHoNFualIeeaG6r6bXOWky7B7vRxxkgVkcDp6aQDvbMzdhHf27+IC0JlNUSTdUyCR0nZwNaSfqV/GwXpbRUjJ+uZSwtk+eIwD9eyApu0t6Lmseqt1gba8UrLVanOHW3i7xOpqdje8t4hxSHyYD7O1WpaKaN4zohpbTYfjvFUSF3X11wlaGyVs5ABkcB2DYANb3ADtO5MjbIgC8HsXpqq2komxurKqGnEjxGwyyBnE49jRueZ5Hl5LWNTNQbFpfpbeM2yGpjipbfA57I3u4TUS7fg4WeLnu2AHnv2AoCo7pSY7YcW6XOcWjG6hktCK/0jgYNmwySsbLJEPJr3uby7Ntu5R9hOK3HONRrJh9qaTWXatioojtuGl7g0uPkAS4+QK+LIL3cMlyu5ZFdpjNX3GqlrKmQ/KkkeXuP1krrT3PPTn90Oudzz+tp+Kkxuk4Kdzm8vSqgFgI8eGMSny4moCybHbHb8YxG2Y5aYRDQW2lio6eMfJjjYGNH1ALJoiA5r6cWLZLmHRfZacUsFyvdf780svotupnzycAbJu7haCdhuOfmq2v3gdcP9kWbf8Ag1R/dV3KICA+hrjl/wAU6IlgsmTWWvs9yhqax0lHXwOglYHVD3NJa4AjcEEeSns9ntXlEBTVqHoZrPX6u5TW0WlWZVFNPeKuWKaK0TubIx07yHNIbsQQQQVNPQk0q1MxDpTQ3fKsAyWy28WqrjNXcLdLBEHODdm8TmgbnbkFZYiALk/pT9D6k1hqpM5waaltmYtjDaiGf4EFza0bN4nD4koAAD+wgAO22BHWC+N1yphfGWlrw6pdCagsB+IwENBPrJ2HqPghlRb2FIGZ6S6lae3KSizLCrzaXsO3WzUzjC/zZK3djh5glajDS1M8oigglkeTsGsYXHf1BX8FrXAggEHuPYvTFRUkLy+GlhjceZcyMA/YEMFM2nPRk1p1OuEMdjwqvoqF7gHXS7RupKVg+dxPAL/UwOPkrNujx0ccV0CxCSGikF0yOuY0XK8SR8Jk25iKJvPgiB57b7uPM9wE1bBEBi8lhlqMNu0EEb5JZKOZjGMG5cTG4AAd53VLZ0C1wPP96LNv/Bqj+6ruEQHCfufmnmeYRk2dS5jht9sDKqlo2wOudDJTiUtfKXBpeBvtuN9vELuxEQBcV9KToVSagZBW6i6Vmlpr/Uky3CzTOEUVdJ3yxPPJkp+UHbNcee4O/F2oucukj0s8Y0MbDYbVTQZBl0rmPfbetLY6SEkEumcNy1zm/Fb28+I8ttwKusn0w1Ewu4vosqwm/WmZh2/xmika13m1+3C4eYJC9uI6UakZ5dY7fiOE3u6zPO3FDSuEbPN8jgGMHm4gK2vSfpM6SauWiCSy5NS267OaOtstzlbBUxu7w0OO0g/KYSPV2KW6mrpKOifWVlTDBTsbxPmlkDGNHiSTsAgKjtcOjTNoPoni91yi6MqssvdfI2ampX709JCyIHqwdt5H8Thu7sHYN+089N+OPWuqenNrXYdUtWrXj+I3GO42THIZI/TYHcUVRUyuBkMZ7HMaGMaHDkTxbbjYnlZrS54a0Ek8gANySgLn+i3Aafoeaexu7TZ43/zi537VLy1LS7Hn4lojiOMSsLJbZZqSkkafnsha132grZnVtG24NoHVUAqnM6wQGQcZbvtxcO++247UBhs5sNlynTW/Y7kTmMtVfQTU1W9/ZHG5hDn79xb8YHuIVE1SyKKsljhmE0bXkMlDS3jAPJ2x7N+1WxdNnVyh096OFxxukuDI8gyeM26mga78I2ndynlI7Q3g3Zv8548CqmO0oDoXoXacfvg9K6yzVVP1ttx8G9VW43BMRAhb4c5XRnbwaVbyOQXH/ue+nP7m9BK/PKyDhrcmqz1Li3n6LASxnq3kMx8wGrsBAEREAREQBERAEREAREQBERAEREB8txomXC1T0UnZKwt38D3H69lDcolpawtcC2aF/MeDmn/1Cm5RlnNu9Ev4q2N2jqm8X8ocj+wrznpDba0I147Vk+X+fEuND1sJuk95IlvrI6+1wVkRBbKwP5d2/aF9K0HAr41jnWSpftuS+nJ+st/aPat+VvYXSuqMai27+ZAu7d0Krg+rkeAxrXFwaAT2kDtXlEUwjBERAEREAREQHEHukuQejaYYVjDZNjW3SauLQe6CLgB+udV31l7vFxooaO4XWuqqeD/JQzzvkZH9FpJA9iuf1d6P+mmtsdC7OrXVz1NAx8dJVUlZJA+FryC4AA8J3IHxmnsUFSe5x6POrzJHlmaMg336nr6YkeXF1KArOoaGsudyp7fb6Waqq6iRsMMEDC98r3HZrWtHMkkgABXH9F3R5+i/R7tuPXGONt9rXm43Ut2PDPIAOr37wxjWM8CQ4jtXs0q6L+juj9ybdsWxx1ReGgtbdbpL6TUMB7eAkBsZ7RuxoPPtUxoAiIgCIiAIi9c88NNTSVFRKyKKNpe+R7g1rQBuSSewIEsckftz2sG7nADs5rytRxm5z5hXOyRrXxWRhLLZG4Fpqe51S4eB5hg8N3fKG23LWMlJYo61qLoy1JbVt6Hw5rf0mOvt6t+O47WXu6ziGkpIzLI/v2HcB3knYAd5IUe6L11wymlv2oF1YWTXet6qmiPMQ00ILWMB8nOfv4ncqKekTm9wumWjDKbeOhoeCWSNrtzPM4bt4h3BoI2Hid/DbofA7AMY01stiLdn0tKxsv8AGEcT/wCkSokKvra7itkfE9Lc6OWjtEQq1PiV2sOiCz7W9V8sOk2JERTTyoRYe/3kWqOipodnVtwqmUlMzt3J3c523g1jXuP0fNZgdixibuElFSexhERZNAiIgPivFJWV+P11DbrnJbKyeB8UFdFG2R1M9zSGyBrvguLSQdjyOypi120j1M0s1MrotQ46qukrZ3zQ39xdJFciTuZBIflntc13wh6tibqljL/jlhyqwT2PJbNQ3e2zjaWkroGzRv8AW1wI38D2hAUK7kL6JLjXzUwp5a2okhHZG+VxaPYTsrTct6AOhWQ1UlVZxf8AGZHni6q21gkhB+hM15A8g4LSf+jawbrt/wB8fIer+b6JBv8AX/yQFb/aV0l0PdA7rqvrJQZJc7fI3D7DUsqqypkaRHVSsIdHTMPyiXBpdt2NB32Lm79h4h0AdDMdrI6u8+/2TyMPF1VyqxHCT5shawkeRcQumrLZLPjliprLYbZSWy3UrOrgpKSJsUUTfBrWgAID7xyCqr6fGT1FZ0xHUlJVSRSWS00tI10Ty0sc7inOxHMH8MFaooD1Q6HujWq2X12VXyivFBe64h1TXW6vc0yua0NBLJA9g2DQOQHYgKiLjdLld601l1uFVXVBAaZqmV0ryB2DicSdls+lum2RasapWvCcap3PqqyQdbPwkspYQfhzPPc1o5+Z2A5kKwmh9zm0cp60S1mUZnVxA79SainjB8iRDuuidNNHtOtIrG+2YFjVNbBNt6RU7mWoqCOzrJXEud5DfYb8gEBsWJ41a8Nwe0YpZYeqt9rpIqOnb38DGhoJ8Sdtye8krMIiAIiIAiIgCIiAIiIAiIgCIiAIiIAsHllqN1x2VkTd54fwsfmR2j2jf7FnEXKtRjWpunLYzenUdOanHaiB2yPilbLE9zHtIc1zTsQR2FSrimTR3yi6ictbXRD8I3s4x84ft8CtCyu1G1ZJPG1u0Mp62Lw2J5j2Hf7Fh6aqq6CrjrqR7o5I3fBeBy327D7O5eJs7qpo6u4S2bGvqetr20L6ipLbuf0J4RYPG8kpL/b+NnDHVRgddBvzafEeLSs4vb0qsasFODxTPJVKcqcnCawaCIi6GgREQBERAEREAREQBERAEReqoqaekpZKmqnjhhjHE+SRwa1o8STyCGUsckfuSRkUTpZXtYxoLnOcdgAO0kqG6u61WsmYSY7aXSRYXb5AbjVt3BuDgdxE0/MP3cz8lfNkV9vOr2Qvw/DJ30+OQke+V14SGyj5rfEeDfldp+COctY7j1qxfHaey2enENNANh3ue7vc497ieZKh6zuJYR9xb+PRy4l/GlHRNNVKnx3sX5F+Z/zflW7a88DIwQRU1NHTwRsjijaGMYwbBoA2AA7hssXlOQUeLYhcMgrj+Bo4TJw973djWjzJIHtWYXN/STzHrauiwqjlBZFtWVvCflH/ACbD6hu72tXS5rKjTcuwj6C0ZLSd9C33N4y5Lb5c2R9ptaqzUPXmlqrmDODUuulc48xs13Ft6i4saPJdohQ10d8MNjwWXJK2LhrLuQ6MOGxZTt34P5x3d6uFTKuVhScKWMtrzLX0y0lG7v3Spe5SWquGW3vy5JBO5Fp+pWUz4vgsslsb116r3toLXTj40tTJ8Fm3k3m4+TVMlJRWLPMW9CdxVjRp7ZPD76OJpVVnmMQaj33P8vyCgs+LYwDZaKqrZhHHLVv2dUOZv8ZwAZGANyfhbd69Nn6W/R2vl7ZaqHU+2MqHvDGGrhnpY3E/7yVjWD2kKvDpa3Kvodbm6ZitkktmJ0kFLG3c8MtTNE2epqCPnvfJtv28LGjuWq6laPjT7RzTTNxen1r8yoJqySmMIYKUsLC1odueLdsg33A5grSmmlntJWkKlOpWwpe5H2Y8lv8A+zxk+ll0Uckc0LZYntex4DmuadwQewg96+K93u043j1Xfb7cKe322jiM1RVVD+GOJg7XOPcFy17n5m12yXo41+P3arkqTj9yNJSOkcXFlM+NsjI9z3Nd1gHgNh2ALeumbdxaOhVmjg4iSqjp6Nm3f1lTG0/0eJdCBhngbJ/hL6Bf7W8T/wC/tUiWDILLlWN0mQY7c6a52yrZx09XTP445W7kbtPfzBHsVDnDKYzMGu4A4NLu4E7kD7D9Stn6DN5N16GFgpnP43W2rrKInw2ndIB/NkCxiZlHAnPKswxjB8ddfsuvtDZra2RsTqutlEcYc47NG57ytFb0ldA3vDRq5iW58bgwD6yo36evLoeV23/zSi/WFVwaW6X3XVW65DbbTcqWjqLPYqm+EVIcRO2As3jBHxXHj5E8uSyFHFYl1FgyTHsqs7brjN8t14oXHZtVb6lk8ZPhxMJG/PsXnIciseJ41V5Dkl0prZa6RofUVlU/gjiBcGguPdzIHtVY3QAym62npSjG6eqkFuvVtqG1FNv8Bz4m9ax+3ZxDhcN/BxC7d6YH4k+e/mkP9piQw1g8DccY1u0kzTJYMexXULH7vdJ2udFR0dW2SR4a0ucQB4AE+xbPk2U47hmM1GQ5VeaO0WqnLRLWVkgjjYXODW7k9m7iB6yqq+g2Sem3jfM/9Wrv7LIrEekrp3kWqnRrv2D4r6J761z6Z0PpcvVR7R1Ecjt3bHb4LT3IGsHgez/CY0C/2t4n/wB/aslYNeNHMpySkx/HdSMdud0q3FlPSUtW18krgCdmgdvIE+xU+6naa5NpLqLUYVlho/fOniimf6HMZY+GRvE3Z2w57eS6V6IPRy1GqNQ8C1ujNoOLiomqDvVn0jhaJYD+D4e3jHj2LBs4rDHEsx35KLqjpH6E0lZLSVOq2LRTwvdHJG6uaC1wOxB8wQpEutdHasfrblKQGUtPJO4nwY0uP3Kh2eapuFfPVOD5JZXPnftz7SXE/ahiMcS8nDdQ8I1CoamtwnKLZfqelkEU8lBMJRG4jcA7dh25rP11bSW22VFxr6iOnpaaJ0000h2bGxoLnOJ7gACVwL7mveiK3UHH5Hb8TKKtjBPgZY3fexdr6m/6FMw/Qlb/AGd6yYaweBr9p6Qeid9vtHZrPqfjNbcK2ZlPTU0Na1z5ZHHZrWjvJJAAUlKk7QAn/Co045n/ADjoP1zVdigawCIiGAiIgCIiAIiIAiIgCIiAIiIDA5XYxerI5sTR6VDu+E+J72+379lFlvrm2+ucyrp+vpZPwdRTPHxh+xwPYVOKjzPMZI477Qx7jtqY2j+mP2/X4rz+mbGTauqXvLb0r729Bd6Ku4/w9XY9nP77zEV1grrMYsjxirkqaMjrGSR83xjvDh8odx+0LbsZzigvTWUtYWUtd2BhPwJPon9n3rQscymsx6s4ec1G87yQE9n5TfA/ettuWI2PKqAXawVEdNNJz3aPwbneDm/Jd6vqKjWFWWdS0274PxRLvaUVhC72bprwZviKLqbJsow6ZtFkdFLVUYPC2Yncgfkv7Heo81vdnyWzX2Pe31rHybbmF3wZG+tp/Yr23vqdZ6uyXB5Mpriwq0Vr+9His1+hlkRFMIQREQBEWPuN9s1pkbHc7pSUbnjia2eUMJHiN1hyUVizaMJTeEVizIItZm1DwiDfrMptfL5s4d9yxlTq/gFODw3v0gjuggkf9vDsuLuaK2zXaS4aOu5+5Sk/+r8jeU7FFlXrxiULT6NQ3WpPlE1g/pO/Yo9ybVfL8zq/efG6SooYJfg9RR7yVEo/KcByHkNvWo9TSVCK9l4vgiztPRm/ry9uGpHe5ZYfUljNNWcaxASUjZffK5t5eh0zh8A/lu7G+rmfJQhWZJeNS7z1mWZBHarHHIB6LTguL3doZFCN3SyeZBA7fJZzGdBr9dHMqckqWWmnJ4jCzaSd3r+S32knyU1YxgGK4jGDZ7XG2o22dVzfhJnet57PUNgoyhc3TxqLVjw+/wBC6/E6K0NBxtn6yt+bLLk3il1KRr+P0mRGyQ2jEbFFiNmjHwaq5MEtXLv2vEIOwcfnSEn8lb5bqN9BbIqSSsqKx7Bs6oqXBz5D2knYAewAAdy+pYrIsitOLY9PebzVNp6WEcz2ue7ua0d7j3BWcYKmsWzyVWtUu5qMI5t7Fm23xbxbb58kY/Osyt2D4dU3quIe9o4Ken32M8pHwWD7ye4Alcr4Hitz1X1Ulqrs58tMZfTLpUdgLSeUY8C7bhA7mg+C/eSX7JtZNSaelo6Z/wANxioqIO3ZTx/Ke8+O3NzvLYdy6jwPCrbgmIQ2ag/CSH8JU1JGzp5SObj4DuA7gAq1Y3tXH5I957jGPovYOOP+6qr+1ffa+KRskMMUFOyGGNscbGhrWNGwaANgAPBftF8txuNDabVUXK5VUVLSU7DJLNK7ZrGjtJKtth88Scngs2zxc7nQWa0VF0ulVFS0dMwySzSnZrGjvP8A75qLcE9M1Kzl+p90p5ILNRCSlx2jlGx2PKSqcPnO24R4Dfw3WlSV966Q+oPvZTCpoMCtkofUHm11U4cwD+U7ub8gHc89l0VSUdNb7bDQ0UDIKeCMRRRRjZrGgbAAeACjwl656y91d78j0N1brQ9H1M/4iaz/AJIvd/VJbeEct5T90vvx2s8/O4P7LCulMm6O2ba99EHQ0YdcbJSe89jd6R75zSR8XWti4eHgY7f/ACbt99u5c29MBrm9NvPA4bb1VOfYaWFdAZ3rvqJop0Q9BzgdfRUvvrY5PShU0bKji6tsPBtxdnx3evfyUgoHuJ46I2gmY6EYrktszCvs9XLc6yGogNsmkka1rIy08XGxux3Pduta90Lu7aHos0FuDtn3C/U8e3i1kcsh+1rVl+hlrRn+s+G5RdM8raOqkoK6GnpnU1K2AAOjLnAhvbz2UW+6UXcR47p/Ymv5zVNbWOb9BkTAf/Mcsmu848osbD+ibess6vd0eWUNCHfkmjqnkfXwruL3OK8mp0QyuwufxGivYqA35rZoGD74nLhii1MjpOjNc9JDj7ZDW36K+e+3pOxjLIhGI+r4efLi+FxfK7F1L7mzeTDnGeY+X8qmhpa0M/ipHsJ/84LCNpLInXp7fieV36Vov1hVeuh+qdv0oyDKrrXWupuDrtjNZZaeOBzWhksxZwveT8gcJ323PYrCunt+J5XfpWi/WFcRdELSfDtY9da/Fs2pque3w2WatY2lqDA4StmhaCXDtGz3cvUjMR2GZ6B9FUVPTKtM8MbnspLbWzSkD4rTF1YJ/lPaPau8umB+JPn35pD/AGmJbXpbodplo5SVMWBY3HQT1YAqayWV89RMBzDTI8khu/PhGw357LVOmB+JPn35pD/aYlkw3izgPoN/jt43+a139lkVtaqU6Df47eN/mtd/ZZFbWsIT2lTfTr/HQvX5hQ/qAu7Ohl+I/gv8VV/2yZcJ9Ov8dC9fmFD+oC7s6GX4j+C/xVX/AGyZDL2I3bXa8e8PRkz66g7PhsFbwH8t0Lmt+1wVSOj+ONyGtzQPj4/e3DrrcANt9jHCAD9blZp00LuLT0KcyIdtJVtpqNnn1lTGD/RDlWNpPqfHplWZXO/HWXn3/wAdq8fIdUmH0dtRw8Uo+C7iIDfi8u3tRiKxTJz9z0vRt/SjuVrc4BlzsU7AD3vjlikH2B6sY1O/0J5h+hK3+zvVUvQ6vJsnTSwiUuDY6meahfv39bTyMH9LhVrOpp30Sy8//wAHW/2d6IS2lPGgH41Om/8A9R0H65quyVJvR/8AxqdN/wD6joP1zVdkEQkERFk0CIiAIiIAiIgCIiAIiIAiIgC8Oa17C1wDmkbEEbgryiAiPM8Sks876+hYXW953IHPqT4H8nwPsWCsWRXDHrh6RSP4o3bdbA4/BkH7D5qd5I2SxujkY17HDZzXDcEeBCjLKtPZYC+vsDDJF2vpBzc36HiPLt9a8xf6LqUJ/iLXsW7l0dB6bR+k6daH4e67Xv5+Zu9ovNqye0mWDgkaRwzU8oBLD4OH7ewrB3bTWx1snX2981sqAd2ugO7Qfons9hCimhudfZrmKyhmfBOw7Hl2+LXDvHkVL+K5xQZCxtNOW0twA5wE8pPNh7/V2hSLS9oXyVK4itbx5cDnd2FxYN1raT1PDnxXSYQ0+puOtPo89PfaVnY1/OTb27O+0r0QavQwTOp7zYaqmmYeF4icHEHza7YhSb2rT84wenyijFRTFlPcohsyUjYSD5rv2HuUutbV6Mda2m30PPsxzI9td2teajeU0sfmWXall3Hoh1Ww+QDrKmqg37pKd3L6t17nao4S0c7u7/u8n91YPHo8WkrWWDJ8UoLZeGjhaJYR1dTt3sceRJ8N1t37icRP/Zy2n/gNSjUuqkcYyj2PvNrilYUZ6s4TXXHB9KeGZr1VrFh9O09U6vqT3COnI+1xC1q565QkFtBjYf4PrJgP6LQfvUinBsPPbjVs/wD6Gr3w4ji1Od4cdtbT4+jMJ+5bSpXs/nS5LzNqVzoqnm6Mpc5eWBBFTqRlN8n6m3WK1Fx5BtPbvSHfbv8AcvzHp3qJlk7Jq63wUMZPx6iOOmA/kRt4vrC6Ohp4KeIR08McTB8mNoaPqC9my0WjHP41Ry7iV+8io/wdCMOl5v6EQ2PQaz05bLkFynr39pggHUx+onm4/WFJtosFmsNGKWzW2moou8QsALvWe0+1ZFFOo2tKj8OOBTXmlLq8f+vUbXDd2LIIvXNNDTwPmnlZFGwFznvcGtaPEk9ig/P9eG08klrwnq5nj4L7lI3iYD/u2n430jy8Ae1K9xToR1ps20boq50jU9Xbxx4vcubJbybKLNiVhku16q2wwsHwWjm+V3c1jflE/wD7XJ2WZTk2q2cQ09PTTSB8nV0FtiO4jB7z3cW3Nzj2eQC+Wko8x1KyllM2asu9cfjS1EhLIGb9rj2Mb6u3uBXTenWmdowK18TOGruszQKiuc3Yn8hg+Sz7T2nyrNepfvBezDxPbQpWfotB1KjVS5ayW6Plz2vYsMz1aYaaUOAWEuk6uovFS0elVQHId4jZ4NH2nme4DfkPILSM61TxbA6VzbhVek3Dh3jt9OQZXeBd3MHmfZurVKnQhhsSPESd3pW6bwc6kuH3kl2I2u6XW3WS0T3S7VkNJRwN45JpXbNaP/Xy7Sucrrcso6QuYmyWITWvDaKUGepkbt1hHynD5T/mx/J7XL7KDGM81yu8F7zKWWy4rG/jpqGLdplHiwHtJH8I4fRCn2y2O1Y7ZILRZaGKjo4G8LIoxsB4k+JPeTzKj+1c9EO9/oXkJUNArGLVS67Y0/8A6n3I9ONY3aMTxqmsdkpRT0kDdgO1zz3uce9xPMlZZEUxJJYI8tUqSqSc5vFvNt7ytXp6aMZTQ6zTasWq01NdYLtTQtrKmmjLxR1ETBHtIB8VrmtYQ48t+Idu2/Nd+z/N9ScWwvAqmFtwhxunfQWimoaYunkEjmkhwbuXu+C1o2A5Dx3Ku9c1rmlrgCCNiD3r4KSxWW31bqqhtNDTTu34pYKdjHH1kAFMDCkQT0ONHr5pB0fjSZTT+jXy81jrlU0pO7qZpY1kcTvyg1u5HcXEdy5o90T99btrZitqoLfW1cVFZXTOMMD3ta6Wd4I3A232ib9isdTbdZMY54lVWMaKWKu9zbzDUKsxOZ2ZUd7bHR1bmTCZlOJKZhaI99iPhyc+E9p58uX39AsXmwdLNtPV2yvpoblZ6qlLpad7G7t4JRuSNv4Iq0bbkvG3rWMDOtuOaenbSVVZ0Q66CjppqiU3SiIZDGXuOzz3AbrmD3Pm0XWg6Ud0mrrZW00ZxyoaHzQPY0nr6fluR2qzZNtlkwnlgFCnS5gnquhfncFNDJNK+khDY42lzj/jMXYBzU1ohgqh6ElmvFF008bqKy011PEKauBkmp3saN6aTbmRsrXl429a8oZbxeJVR04rNd63pkXqejtVdURGhogJIad72naEd4Gy7j6HNPPS9CjCKeqglgmZHVB0crCxzf8AHJu0Hmpz29a8oG8sDlD3QOorT0Y7dabfS1NTNXX6BrmQRukPAyKV5JAB5bhq5Z6IGitj1FzTMaTP8SmrKWksTpKNtWyaER1DpAGvaQW7kAO5cxz7FaqvGwQY5YFJuk1NkONa84Xf32W5xsob5RTyONJIAGtmZxb/AAfDdXFalMfJotl0cbHOc6y1rWtaNyT1D9gAto2Hn9a8oG8SiO3WzMLTdaW6Wq3XuiraWRs1PVU0EsckT282va4DcEHmCFZN0DckzzJNOMsnz295BdKqK5xMgfeppZXsYYdyGmTmBv4LrXYef1rztsmBlyxCIiGoREQBERAEREAREQBERAEREAREQBERAaxkuEWvIA6cD0Wt25Txj430h3/eokv2MXvHZw+sp3dU127KqEks8jv8k+vZdBL8vYySMskaHNcNi1w3BCq7zRVG4esvZlxX1Lex0zWtfZftR4P6MhzH9UbjbgylvUbq+nHITNO0rR59zvbsfNSVZ8tx++NHoFyhdKf4CQ8Eg/kn9iw170yx66F0tIx9tnPPen+IT5sPL6tlH920syeicX0bYLhG3mDC7gf/ADXd/qJUSMr+0yktePf5+JYOnoy+zjL1cu7y70TNdbPbL1QGjudJFURHmA8c2nxae0HzC9Fot9fawaSW5PrqNo/AuqBvMz8lzhyePMgH1qBjdM5xs9Uam8ULW/ImDiz+kCF74tV8zh5G400+3dJTsP3bLdaXoa2M4NSN/wB3Lpw1aVSMo/fQ8Opk6xX+zTXaS1tuNO2tjdwup3u4H7+TTsSPMbhZJc73LUytvFI2mv2O2a4sHxXOY+N7fNrg7dp9SxFHqJmdsi6mkvlR1Q5NZOGzcI7gC4E/atv21STzzXR9/UzH0TuZxyaT6Xl1NeDXWzp/dflz2sYXPcGtHaSdguW6/UbOK4bS5FVxjbsgDYv6oBWsVtwuNc8ura+rqSe+aZz/ALytZ6ch8kW/vrJVD0Lry+LVS5JvyOrrlm2JWhpNwyG3wkdrBMHu/mt3KjnJtfbXSxugxi3yV03YKiqBjiHmG/Gd9igdwDWnYBvqGy+aRzd9uJv1qJV0xWmsIpIvrP0Ms6TUqzc+5d2feZrJc2yjKZSL1d5poSdxTMPBCPDZg5H27lbbhGid8yQx3C/GS0W12zg1zf8AGJh+S0/FHm76l8Wnd9smP1BrKjCLhfbqJN4JohxsibsNuFvCdnb7/C9W2ykqozXWK+uMWOYALXE74s1wPwgPH4ZaPsK2tqVOo/WVm5Pgk32nbSd5c2y/C2EI0or5pOKXUse/DHoJLx7GrJitnbbbHQx0sA5uI5ukd857jzcfMrB5RqphWJsey4XeOeqaP+qUf4aX2gcm/wAohaG/TDVHK+eZZ4aanf8AGpaMlw9XC3gb962nHNEsDsDmTSW510qWnfrbgesG/iGDZv2FXCnWksKcNVdPkjxMrfR9KbqXlw6sntUE830zlh3Jmg1GoGqep0zqHAbNJZrY48Lrg87O285iNm+pgJ81tWD6E2GwVTbxkk3v/dy7rC+cEwxv8Q083n8p2/qCleKKOGJsUTGsY0bNa0bADwA7l+1vC1WOvUes+nZ1I53Gn5qm7eygqNN7dX3n/VLa+4AAdgREUooAiIgCIiAIiIAiIgCIiAIiIAiIgCIiAIiIAiIgCIiAIiIAiIgCIiAIiIAiIgCIiAIiIAiIgCIiAIiIAiIgPBaC0ggEHuKx1Tj1hrN/S7Lb5ie0vp2E/Xsski1lFS2o2jOUHjF4GsS6eYVOd345RD6DSz7iF8smlmCP/wDgLW/RnkH/ANy3FFydrRe2C7ESo6Quo7Ksv7n5mkjSXAt9zY9/XUy/3l7W6V4A3/s3Tn6UkjvvctxRYVrRXyLsRs9J3j/5pf3PzNZh08winO8eLWvfxdAHffuspT49YaTb0WyW6Hbs6umY37gski6RpQjsijhO6rT9+bfNs/LWMY0NY0NA7hyX62G6IuhwCIiAIiIAiIgCIiAIiIAiIgCIiAIiIAiIgCIiAIiIAiIgCIiAIiIAiIgCIiAIiIAiIgCIiAIiIAiIgCIiAIiIAiIgCIiAIiIAiIgCIiAIiIAiIgCIiAIiIAiIgCIiAIiIAiIgCIiAIiIAiIgCIiAIiIAiIgCIiAIiIAiIgCIiAIiIAiIgCIiAIiIAiIgCIiAIiIAiIgCIiAIiIAiIgCIiAIiIAiIgCIiAIiIAiIgCIiAIiIAiIgCIiAIiIAiIgCIiAIiIAiIgCIiAIiIAiIgCIiAIiIAiIgCIiAIiIAiIgCIiAIiIAiIgCIiAIiIAiIgCIiAIiIAiIgCIiAIiIAiIgCIiAIiIAiIgCIiAIiIAiIgCIiAIiIAiIgCIiAIiIAiIgCIiAIiID//Z" alt="Synergy Capital"></div>
+    <input id="loginPasscode" type="password" placeholder="••••" maxlength="12" inputmode="numeric">
+    <div class="login-error" id="loginError">Incorrect passcode.</div>
+    <button class="btn primary" id="loginBtn">Enter</button>
+  </div>
+</div>
+
+<div class="wrap" id="appWrap" style="display:none;">
+
+  <div class="masthead">
+    <div>
+      <h1>Onboarding &amp; exit checklist</h1>
+      <p>Admin &amp; IT handover tracker</p>
+    </div>
+    <div class="btn-row" id="checklistActions">
+      <button class="btn" id="editLockBtn" title="Unlock to add, edit, delete, or reorder items">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+        Unlock editing
+      </button>
+      <button class="btn" id="saveRecordBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>
+        Mark complete
+      </button>
+      <button class="btn primary" onclick="window.print()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2M6 14h12v8H6z"/></svg>
+        Print
+      </button>
+    </div>
+  </div>
+
+  <div class="signed-in-as" style="margin-bottom:20px;">
+    <button id="signOutBtn">Lock screen</button>
+  </div>
+
+  <div class="banner" id="configBanner">
+    Firebase isn't connected yet, so nothing will save or sync. Open this file and fill in FIREBASE_CONFIG near the top (see the setup comment) to enable shared live data and saved records.
+  </div>
+
+  <div class="view-tabs">
+    <button class="view-tab" data-view="checklist">Checklist</button>
+    <button class="view-tab" data-view="records">Employee records</button>
+  </div>
+
+  <div id="checklistView">
+    <div class="tabs-row" id="deptTabs">
+      <button class="dept-tab" data-dept="admin">Admin</button>
+      <button class="dept-tab" data-dept="it">IT</button>
+    </div>
+    <div class="tabs-row" id="typeTabs">
+      <button class="type-tab" data-type="newjoiner">New joiner</button>
+      <button class="type-tab" data-type="exit">Exit</button>
+      <button class="type-tab" data-type="intern">Intern</button>
+    </div>
+
+    <div id="sessionBar"></div>
+
+    <div class="meta">
+      <div><label for="mName">Employee name</label><input id="mName" type="text" placeholder="Full name"></div>
+      <div><label for="mRole">Role / team</label><input id="mRole" type="text" placeholder="e.g. Frontend engineer"></div>
+      <div><label for="mDate">Date</label><input id="mDate" type="date"></div>
+      <div><label for="mPrep">Prepared by</label><input id="mPrep" type="text" placeholder="Your name"></div>
+    </div>
+
+    <div class="progress-row">
+      <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+      <div class="progress-text" id="progressText">0 / 0 complete</div>
+    </div>
+
+    <div class="panel">
+      <div id="listPanel"></div>
+      <div class="add-row">
+        <button class="add-toggle" id="addToggle">+ Add item</button>
+        <div class="add-form" id="addForm">
+          <input type="text" id="addInput" placeholder="Describe the checklist item">
+          <button class="mini-btn save" id="addSave">Add</button>
+          <button class="mini-btn" id="addCancel">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div id="recordsView" style="display:none;">
+    <div class="records-toolbar">
+      <select id="filterDept">
+        <option value="all">All departments</option>
+        <option value="admin">Admin</option>
+        <option value="it">IT</option>
+      </select>
+      <select id="filterType">
+        <option value="all">All types</option>
+        <option value="newjoiner">New joiner</option>
+        <option value="exit">Exit</option>
+        <option value="intern">Intern</option>
+      </select>
+      <select id="filterStatus">
+        <option value="all">Active + completed</option>
+        <option value="active">Active only</option>
+        <option value="completed">Completed only</option>
+      </select>
+      <input type="text" id="filterSearch" placeholder="Search by employee name">
+      <button class="btn" id="exportBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0 0-4-4m4 4 4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+        Export all data
+      </button>
+    </div>
+    <div id="recordsList"></div>
+  </div>
+
+  <div id="recordDetailView" style="display:none;">
+    <button class="back-link" id="backToRecords">
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+      Back to records
+    </button>
+    <div class="meta" id="detailMeta"></div>
+    <div class="panel"><div id="detailList"></div></div>
+    <div class="btn-row" style="margin-top:16px;" id="detailActions"></div>
+  </div>
+
+  <div id="printArea">
+    <h1 id="pTitle"></h1>
+    <p class="p-sub" id="pSub"></p>
+    <div class="p-meta">
+      <div><strong>Employee</strong><span id="pName"></span></div>
+      <div><strong>Role / team</strong><span id="pRole"></span></div>
+      <div><strong>Date</strong><span id="pDate"></span></div>
+      <div><strong>Prepared by</strong><span id="pPrep"></span></div>
+    </div>
+    <div id="pList"></div>
+  </div>
+
+</div>
+
+<script>
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyC9qJBw3yrBL_i8IQl6ApFnGkmqmgq26o4",
+  authDomain: "checklist-224f4.firebaseapp.com",
+  projectId: "checklist-224f4",
+  storageBucket: "checklist-224f4.firebasestorage.app",
+  messagingSenderId: "805548433385",
+  appId: "1:805548433385:web:69fcaeab5209d8aa403578"
+};
+
+const DEFAULT_DATA = {
+  admin: {
+    label: "Admin",
+    lists: {
+      newjoiner: [
+        {
+          code: "ADM-NJ-01",
+          text: "Prepare offer / appointment letter and get it signed"
+        },
+        {
+          code: "ADM-NJ-02",
+          text: "Collect ID proof, address proof and educational certificates"
+        },
+        {
+          code: "ADM-NJ-03",
+          text: "Collect bank account details for payroll setup"
+        },
+        {
+          code: "ADM-NJ-04",
+          text: "Issue employee ID card"
+        },
+        {
+          code: "ADM-NJ-05",
+          text: "Assign desk / seating and workstation"
+        },
+        {
+          code: "ADM-NJ-06",
+          text: "Add employee to biometric / attendance system"
+        },
+        {
+          code: "ADM-NJ-07",
+          text: "Share employee handbook and company policies"
+        },
+        {
+          code: "ADM-NJ-08",
+          text: "Explain leave, attendance and reimbursement policy"
+        },
+        {
+          code: "ADM-NJ-09",
+          text: "Schedule HR induction and team introductions"
+        },
+        {
+          code: "ADM-NJ-10",
+          text: "Open personnel file and update HRMS record"
+        }
+      ],
+      exit: [
+        {
+          code: "ADM-EX-01",
+          text: "Collect resignation letter and confirm last working day"
+        },
+        {
+          code: "ADM-EX-02",
+          text: "Schedule and conduct exit interview"
+        },
+        {
+          code: "ADM-EX-03",
+          text: "Calculate full and final settlement"
+        },
+        {
+          code: "ADM-EX-04",
+          text: "Collect employee ID card and access cards"
+        },
+        {
+          code: "ADM-EX-05",
+          text: "Process PF / gratuity / insurance closure"
+        },
+        {
+          code: "ADM-EX-06",
+          text: "Issue relieving letter"
+        },
+        {
+          code: "ADM-EX-07",
+          text: "Issue experience / service certificate"
+        },
+        {
+          code: "ADM-EX-08",
+          text: "Mark employee inactive in HRMS and payroll"
+        },
+        {
+          code: "ADM-EX-09",
+          text: "Remove from attendance and leave systems"
+        },
+        {
+          code: "ADM-EX-10",
+          text: "Archive personnel file"
+        }
+      ],
+      intern: [
+        {
+          code: "ADM-IN-01",
+          text: "Sign internship agreement and NDA"
+        },
+        {
+          code: "ADM-IN-02",
+          text: "Issue temporary ID card"
+        },
+        {
+          code: "ADM-IN-03",
+          text: "Assign mentor / reporting manager"
+        },
+        {
+          code: "ADM-IN-04",
+          text: "Conduct orientation session"
+        },
+        {
+          code: "ADM-IN-05",
+          text: "Register stipend details with finance"
+        },
+        {
+          code: "ADM-IN-06",
+          text: "Set up attendance marking"
+        },
+        {
+          code: "ADM-IN-07",
+          text: "Share feedback form for end of internship"
+        },
+        {
+          code: "ADM-IN-08",
+          text: "Prepare certificate of completion template"
+        }
+      ]
+    }
+  },
+  it: {
+    label: "IT",
+    lists: {
+      newjoiner: [
+        {
+          code: "IT-NJ-01",
+          text: "Create user email account"
+        },
+        {
+          code: "IT-NJ-02",
+          text: "Procure and assign laptop"
+        },
+        {
+          code: "IT-NJ-03",
+          text: "Prepare and configure laptop"
+        },
+        {
+          code: "IT-NJ-04",
+          text: "Install Microsoft 365 Apps"
+        },
+        {
+          code: "IT-NJ-05",
+          text: "Install Sophos Antivirus"
+        },
+        {
+          code: "IT-NJ-06",
+          text: "Configure printer and scan folder access"
+        },
+        {
+          code: "IT-NJ-07",
+          text: "Create email signature and QR code"
+        },
+        {
+          code: "IT-NJ-08",
+          text: "Configure OneDrive access"
+        },
+        {
+          code: "IT-NJ-09",
+          text: "Install standard applications",
+          children: [
+            {
+              code: "IT-NJ-09.1",
+              text: "Install WinRAR"
+            },
+            {
+              code: "IT-NJ-09.2",
+              text: "Install Zoom"
+            },
+            {
+              code: "IT-NJ-09.3",
+              text: "Install Google Chrome"
+            },
+            {
+              code: "IT-NJ-09.4",
+              text: "Install Adobe Acrobat Reader"
+            }
+          ]
+        },
+        {
+          code: "IT-NJ-10",
+          text: "Install optional third-party applications (if required)",
+          children: [
+            {
+              code: "IT-NJ-10.1",
+              text: "Install WhatsApp"
+            },
+            {
+              code: "IT-NJ-10.2",
+              text: "Install VLC Media Player"
+            },
+            {
+              code: "IT-NJ-10.3",
+              text: "Install Nitro Pro"
+            }
+          ]
+        },
+        {
+          code: "IT-NJ-11",
+          text: "Create user account on the file server"
+        },
+        {
+          code: "IT-NJ-12",
+          text: "Create and share the user\u2019s scan folder on the file server"
+        },
+        {
+          code: "IT-NJ-13",
+          text: "Create and configure telephone extension"
+        },
+        {
+          code: "IT-NJ-14",
+          text: "Conduct cybersecurity induction and awareness session"
+        }
+      ],
+      exit: [
+        {
+          code: "IT-EX-01",
+          text: "Mobile phone and/or laptop"
+        },
+        {
+          code: "IT-EX-02",
+          text: "Department network/e-mail account & electronic files",
+          children: [
+            {
+              code: "IT-EX-02.1",
+              text: "Email password"
+            },
+            {
+              code: "IT-EX-02.2",
+              text: "Cloud storage password (if there's any)"
+            }
+          ]
+        },
+        {
+          code: "IT-EX-03",
+          text: "Remove employee's name on",
+          children: [
+            {
+              code: "IT-EX-03.1",
+              text: "Email group and distribution lists"
+            },
+            {
+              code: "IT-EX-03.2",
+              text: "Internal/office phone list"
+            },
+            {
+              code: "IT-EX-03.3",
+              text: "Website"
+            },
+            {
+              code: "IT-EX-03.4",
+              text: "Building directory"
+            }
+          ]
+        }
+      ],
+      intern: [
+        {
+          code: "IT-IN-01",
+          text: "Create email ID"
+        },
+        {
+          code: "IT-IN-02",
+          text: "Procure/Assign the laptop"
+        },
+        {
+          code: "IT-IN-03",
+          text: "Prepare the laptop"
+        },
+        {
+          code: "IT-IN-04",
+          text: "Install Office 365 apps"
+        },
+        {
+          code: "IT-IN-05",
+          text: "Install Sophos antivirus"
+        },
+        {
+          code: "IT-IN-06",
+          text: "Configure printer and scan folder access"
+        },
+        {
+          code: "IT-IN-07",
+          text: "Create email signature and QR code"
+        },
+        {
+          code: "IT-IN-08",
+          text: "Setup OneDrive access"
+        },
+        {
+          code: "IT-IN-09",
+          text: "Install following apps",
+          children: [
+            {
+              code: "IT-IN-09.1",
+              text: "WinRAR"
+            },
+            {
+              code: "IT-IN-09.2",
+              text: "Zoom"
+            },
+            {
+              code: "IT-IN-09.3",
+              text: "Google Chrome"
+            },
+            {
+              code: "IT-IN-09.4",
+              text: "Adobe PDF Reader"
+            }
+          ]
+        },
+        {
+          code: "IT-IN-10",
+          text: "Optional 3rd party apps",
+          children: [
+            {
+              code: "IT-IN-10.1",
+              text: "WhatsApp"
+            },
+            {
+              code: "IT-IN-10.2",
+              text: "VLC"
+            },
+            {
+              code: "IT-IN-10.3",
+              text: "Ntro Pro"
+            }
+          ]
+        },
+        {
+          code: "IT-IN-11",
+          text: "Create user on the server"
+        },
+        {
+          code: "IT-IN-12",
+          text: "Create and share user scan folder on the server"
+        },
+        {
+          code: "IT-IN-13",
+          text: "Create user and setup telephone"
+        },
+        {
+          code: "IT-IN-14",
+          text: "Conduct Cybersecurity induction"
+        }
+      ]
+    }
+  }
+};
+
+const TEMPLATE_VERSION = { it_newjoiner: 3, it_intern: 2, it_exit: 2 };
+
+
+const TYPE_LABELS = { newjoiner: "New joiner", exit: "Exit", intern: "Intern" };
+const DEPT_PREFIX = { admin: "ADM", it: "IT" };
+const TYPE_PREFIX = { newjoiner: "NJ", exit: "EX", intern: "IN" };
+
+let db = null;
+let firebaseReady = false;
+let checklistRef = null;
+let unsubTemplate = null;
+let unsubRecords = null;
+let unsubSession = null;
+
+let view = "checklist";
+let state = { dept: "admin", type: "newjoiner" };
+let items = [];
+let checks = [];
+let notes = {};
+let currentSessionId = null;
+let records = [];
+let templatesCache = {};
+let selectedRecord = null;
+let detailEditMode = false;
+let filters = { dept: "all", type: "all", status: "all", search: "" };
+
+function escapeHtml(s){
+  const d = document.createElement("div");
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+function cloneTemplateList(list){
+  return list.map(item => {
+    const clone = { code: item.code, text: item.text };
+    if(item.children && item.children.length){
+      clone.children = item.children.map(k => ({ code: k.code, text: k.text }));
+    }
+    return clone;
+  });
+}
+
+function initFirebase(){
+  const isPlaceholder = FIREBASE_CONFIG.apiKey === "YOUR_API_KEY";
+  if(isPlaceholder){
+    document.getElementById("configBanner").classList.add("show");
+    return false;
+  }
+  try{
+    firebase.initializeApp(FIREBASE_CONFIG);
+    db = firebase.firestore();
+    return true;
+  }catch(e){
+    console.error("Firebase init failed", e);
+    document.getElementById("configBanner").classList.add("show");
+    return false;
+  }
+}
+
+/* ---------- Template (shared item structure per dept/type) ---------- */
+
+async function subscribeTemplate(){
+  items = cloneTemplateList(DEFAULT_DATA[state.dept].lists[state.type]);
+  renderSessionBar();
+  renderList();
+  if(!firebaseReady) return;
+  if(unsubTemplate) unsubTemplate();
+  const key = state.dept + "_" + state.type;
+  const desiredVersion = TEMPLATE_VERSION[key] || 1;
+  const ref = db.collection("checklists").doc(key);
+  checklistRef = ref;
+  try{
+    const snap = await ref.get();
+    if(!snap.exists){
+      await ref.set({ items: DEFAULT_DATA[state.dept].lists[state.type], version: desiredVersion });
+    } else {
+      const currentVersion = snap.data().version || 1;
+      if(currentVersion < desiredVersion){
+        await ref.set({ items: DEFAULT_DATA[state.dept].lists[state.type], version: desiredVersion });
+      }
+    }
+  }catch(e){
+    console.error("Could not read/seed template doc", e);
+    alert("Couldn't load/update the " + key + " checklist template: " + (e && e.message ? e.message : "unknown error") + "\n\nCheck the browser console (F12) for details, and confirm Firestore rules allow reads/writes.");
+  }
+  unsubTemplate = ref.onSnapshot(doc => {
+    if(doc.exists){
+      const d = doc.data();
+      items = d.items || [];
+    }
+    renderSessionBar();
+    renderList();
+  }, err => console.warn("Template snapshot error", err));
+}
+
+async function persistChecklist(){
+  if(!firebaseReady){
+    alert("Firebase isn't connected, so this change can't be saved right now.");
+    return;
+  }
+  if(!checklistRef){
+    alert("Couldn't find the checklist to save to \u2014 try switching tabs and back, then retry.");
+    return;
+  }
+  try{
+    const key = state.dept + "_" + state.type;
+    const version = TEMPLATE_VERSION[key] || 1;
+    await checklistRef.set({ items, version });
+  }catch(e){
+    console.error("Could not save checklist", e);
+    alert("This change didn't save: " + (e && e.message ? e.message : "unknown error") + "\n\nThis usually means the Firestore security rules need updating to allow writes (Firebase Console \u2192 Firestore Database \u2192 Rules).");
+  }
+}
+
+/* ---------- Records collection: doubles as active sessions + completed history ---------- */
+
+function tsMillis(r){
+  const t = r.updatedAt || r.completedAt || r.savedAt || r.createdAt;
+  if(t && t.toMillis) return t.toMillis();
+  return 0;
+}
+
+function subscribeAllRecords(){
+  if(!firebaseReady) return;
+  if(unsubRecords) unsubRecords();
+  unsubRecords = db.collection("records").onSnapshot(snap => {
+    records = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    records.sort((a,b) => tsMillis(b) - tsMillis(a));
+    if(view === "records") renderRecords();
+    renderSessionBar();
+  }, err => console.warn("Records snapshot error", err));
+}
+
+function getActiveSessionsForTab(){
+  return records.filter(r => r.dept === state.dept && r.type === state.type && (r.status || "completed") === "active");
+}
+
+/* ---------- Session lifecycle (one per employee) ---------- */
+
+function renderSessionBar(){
+  const bar = document.getElementById("sessionBar");
+  if(!bar) return;
+  if(currentSessionId){
+    const name = document.getElementById("mName").value || "this employee";
+    bar.innerHTML =
+      '<div class="session-active">' +
+        '<span>Working on: <strong>' + escapeHtml(name) + '</strong></span>' +
+        '<button class="mini-btn" id="switchEmployeeBtn">Switch employee</button>' +
+      '</div>';
+    document.getElementById("switchEmployeeBtn").addEventListener("click", closeSession);
+  } else {
+    const activeList = getActiveSessionsForTab();
+    const options = activeList.map(r =>
+      '<option value="' + r.id + '">' + escapeHtml(r.employeeName || "Unnamed") + (r.role ? " \u2014 " + escapeHtml(r.role) : "") + '</option>'
+    ).join("");
+    bar.innerHTML =
+      '<div class="session-picker">' +
+        (activeList.length
+          ? ('<select id="resumeSelect"><option value="">Resume an in-progress employee\u2026</option>' + options + '</select>' +
+             '<button class="btn" id="resumeBtn">Resume</button>')
+          : '<span style="color:var(--muted);font-size:13px;">No one in progress on this list yet.</span>') +
+        '<button class="btn primary" id="startSessionBtn">+ Start new employee</button>' +
+      '</div>';
+    if(activeList.length){
+      document.getElementById("resumeBtn").addEventListener("click", ()=>{
+        const id = document.getElementById("resumeSelect").value;
+        if(id) openSession(id);
+      });
+    }
+    document.getElementById("startSessionBtn").addEventListener("click", startNewSession);
+  }
+}
+
+async function startNewSession(){
+  const name = document.getElementById("mName").value.trim();
+  if(!name){ alert("Enter the employee's name first, then click \u201cStart new employee.\u201d"); return; }
+  if(!firebaseReady){ alert("Firebase isn't configured yet, so sessions can't be saved. See the setup comment at the top of this file."); return; }
+  const doc = {
+    dept: state.dept,
+    type: state.type,
+    employeeName: name,
+    role: document.getElementById("mRole").value.trim(),
+    date: document.getElementById("mDate").value,
+    preparedBy: document.getElementById("mPrep").value.trim(),
+    status: "active",
+    checks: [],
+    notes: {},
+    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+  };
+  try{
+    const ref = await db.collection("records").add(doc);
+    openSession(ref.id);
+  }catch(e){
+    console.error(e);
+    alert("Could not start a new session. Check your Firebase setup.");
+  }
+}
+
+async function openSession(id){
+  if(unsubSession) unsubSession();
+  currentSessionId = id;
+  const ref = db.collection("records").doc(id);
+  unsubSession = ref.onSnapshot(doc => {
+    if(!doc.exists){ closeSession(); return; }
+    const d = doc.data();
+    checks = d.checks || [];
+    notes = d.notes || {};
+    document.getElementById("mName").value = d.employeeName || "";
+    document.getElementById("mRole").value = d.role || "";
+    document.getElementById("mDate").value = d.date || "";
+    document.getElementById("mPrep").value = d.preparedBy || "";
+    if(d.dept && d.type && (d.dept !== state.dept || d.type !== state.type)){
+      state.dept = d.dept;
+      state.type = d.type;
+      renderTabs();
+      subscribeTemplate();
+    }
+    renderSessionBar();
+    renderList();
+  }, err => console.warn("Session snapshot error", err));
+}
+
+function closeSession(){
+  if(unsubSession) unsubSession();
+  unsubSession = null;
+  currentSessionId = null;
+  checks = [];
+  notes = {};
+  document.getElementById("mName").value = "";
+  document.getElementById("mRole").value = "";
+  document.getElementById("mDate").value = "";
+  document.getElementById("mPrep").value = "";
+  renderSessionBar();
+  renderList();
+}
+
+async function persistSessionState(){
+  if(!firebaseReady || !currentSessionId) return;
+  try{
+    await db.collection("records").doc(currentSessionId).set({
+      checks, notes,
+      employeeName: document.getElementById("mName").value.trim(),
+      role: document.getElementById("mRole").value.trim(),
+      date: document.getElementById("mDate").value,
+      preparedBy: document.getElementById("mPrep").value.trim(),
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+  }catch(e){
+    console.error("Could not save session", e);
+    alert("Your check/note didn't save: " + (e && e.message ? e.message : "unknown error") + "\n\nThis usually means the Firestore security rules need updating to allow writes.");
+  }
+}
+
+async function markComplete(){
+  if(!currentSessionId){ alert("Start or resume an employee session before marking it complete."); return; }
+  const name = document.getElementById("mName").value.trim();
+  if(!name){ alert("Enter the employee's name first."); return; }
+  const ok = confirm("Mark this checklist complete for " + name + " and file it under Employee records?");
+  if(!ok) return;
+  const frozen = flattenForOutput();
+  try{
+    await db.collection("records").doc(currentSessionId).set({
+      status: "completed",
+      items: frozen,
+      employeeName: name,
+      role: document.getElementById("mRole").value.trim(),
+      date: document.getElementById("mDate").value,
+      preparedBy: document.getElementById("mPrep").value.trim(),
+      completedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+    closeSession();
+    alert("Saved. You can find it anytime under Employee records.");
+  }catch(e){
+    console.error(e);
+    alert("Could not save. Check your Firebase setup and Firestore rules.");
+  }
+}
+
+/* ---------- Tabs ---------- */
+
+function renderTabs(){
+  document.querySelectorAll(".dept-tab").forEach(btn=>{
+    btn.classList.toggle("active", btn.dataset.dept === state.dept);
+  });
+  document.querySelectorAll(".type-tab").forEach(btn=>{
+    const isActive = btn.dataset.type === state.type;
+    btn.classList.toggle("active", isActive);
+    if(isActive){ btn.setAttribute("data-active-dept", state.dept); }
+    else{ btn.removeAttribute("data-active-dept"); }
+  });
+  document.getElementById("progressFill").setAttribute("data-active-dept", state.dept);
+}
+
+async function switchDeptType(){
+  closeSession();
+  renderTabs();
+  document.getElementById("addForm").classList.remove("open");
+  document.getElementById("addInput").value = "";
+  await subscribeTemplate();
+}
+
+/* ---------- Item list rendering (template structure + session checks/notes) ---------- */
+
+function nextCode(){
+  const prefix = DEPT_PREFIX[state.dept] + "-" + TYPE_PREFIX[state.type] + "-";
+  let max = 0;
+  items.forEach(item=>{
+    const m = item.code.match(/-(\d+)$/);
+    if(m) max = Math.max(max, parseInt(m[1], 10));
+  });
+  return prefix + String(max + 1).padStart(2, "0");
+}
+
+function buildRowHTML(code, text, opts){
+  const isSub = opts.isSub;
+  const isParentHeader = opts.isParentHeader;
+  const checkboxHTML = isParentHeader
+    ? '<div class="checkbox-slot"></div>'
+    : '<input type="checkbox" ' + (checks.includes(code) ? "checked" : "") + (currentSessionId ? "" : " disabled") + ' data-code="' + code + '">';
+  const handleHTML = isSub
+    ? '<div class="drag-handle"></div>'
+    : '<div class="drag-handle" title="Drag to reorder"><svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><circle cx="9" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg></div>';
+  const addSubBtn = isSub ? "" :
+    '<button class="icon-btn addsub" title="Add sub-item" data-code="' + code + '">' +
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>' +
+    '</button>';
+  const noteBtn = isParentHeader ? "" :
+    '<button class="icon-btn note" title="Add note" data-code="' + code + '">' +
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>' +
+    '</button>';
+  const notePreview = (!isParentHeader && notes[code])
+    ? '<div class="note-preview" data-note-preview>' + escapeHtml(notes[code]) + '</div>'
+    : '<div data-note-preview></div>';
+  return handleHTML + checkboxHTML +
+    '<div class="code">' + code + '</div>' +
+    '<div class="item-cell">' +
+      '<div class="item-text" data-view>' + escapeHtml(text) + '</div>' +
+      notePreview +
+    '</div>' +
+    '<div class="row-actions">' +
+      addSubBtn + noteBtn +
+      '<button class="icon-btn edit" title="Edit" data-code="' + code + '">' +
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>' +
+      '</button>' +
+      '<button class="icon-btn del" title="Delete" data-code="' + code + '">' +
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6"/></svg>' +
+      '</button>' +
+    '</div>';
+}
+
+function renderList(){
+  const panel = document.getElementById("listPanel");
+  panel.innerHTML = "";
+  items.forEach(item=>{
+    const code = item.code, text = item.text;
+    const kids = item.children || [];
+    const isParentHeader = kids.length > 0;
+    const row = document.createElement("div");
+    row.className = "row" + (checks.includes(code) ? " checked" : "") + (isParentHeader ? " parent-header" : "");
+    row.dataset.code = code;
+    row.innerHTML = buildRowHTML(code, text, { isSub: false, isParentHeader });
+    panel.appendChild(row);
+    attachDragHandlers(row, code);
+
+    kids.forEach(kid=>{
+      const subRow = document.createElement("div");
+      subRow.className = "row sub-row" + (checks.includes(kid.code) ? " checked" : "");
+      subRow.dataset.code = kid.code;
+      subRow.innerHTML = buildRowHTML(kid.code, kid.text, { isSub: true, isParentHeader: false });
+      panel.appendChild(subRow);
+    });
+  });
+  panel.querySelectorAll('input[type="checkbox"]').forEach(cb=>cb.addEventListener("change", onToggle));
+  panel.querySelectorAll('.icon-btn.edit').forEach(b=>b.addEventListener("click", onEditClick));
+  panel.querySelectorAll('.icon-btn.del').forEach(b=>b.addEventListener("click", onDeleteClick));
+  panel.querySelectorAll('.icon-btn.addsub').forEach(b=>b.addEventListener("click", onAddSubClick));
+  panel.querySelectorAll('.icon-btn.note').forEach(b=>b.addEventListener("click", onNoteClick));
+  updateProgress();
+}
+
+function findItemRef(code){
+  for(const item of items){
+    if(item.code === code) return { arr: items, index: items.indexOf(item), ref: item };
+    const kids = item.children || [];
+    for(let i=0;i<kids.length;i++){
+      if(kids[i].code === code) return { arr: kids, index: i, ref: kids[i], parent: item };
+    }
+  }
+  return null;
+}
+
+async function onToggle(e){
+  if(!currentSessionId){
+    e.target.checked = !e.target.checked;
+    return;
+  }
+  const code = e.target.dataset.code;
+  const row = e.target.closest(".row");
+  if(e.target.checked){
+    if(!checks.includes(code)) checks.push(code);
+    row.classList.add("checked");
+  } else {
+    checks = checks.filter(c => c !== code);
+    row.classList.remove("checked");
+  }
+  updateProgress();
+  await persistSessionState();
+}
+
+function onNoteClick(e){
+  const code = e.currentTarget.dataset.code;
+  const row = document.querySelector('#listPanel .row[data-code="' + CSS.escape(code) + '"]');
+  if(!row) return;
+  const slot = row.querySelector('[data-note-preview]');
+  if(!slot) return;
+  const current = notes[code] || "";
+  slot.innerHTML = '<textarea class="note-input" rows="2" placeholder="Add a note\u2026">' + escapeHtml(current) + '</textarea>';
+  const ta = slot.querySelector("textarea");
+  ta.focus();
+  ta.addEventListener("blur", async ()=>{
+    const val = ta.value.trim();
+    if(val){ notes[code] = val; } else { delete notes[code]; }
+    await persistSessionState();
+    renderList();
+  });
+}
+
+let editUnlocked = false;
+
+function requestPasscode(){
+  const entered = window.prompt("Enter passcode:");
+  if(entered === null) return false;
+  if(entered !== APP_PASSCODE){
+    alert("Incorrect passcode.");
+    return false;
+  }
+  return true;
+}
+
+function checkPasscode(){
+  if(editUnlocked) return true;
+  return requestPasscode();
+}
+
+function updateEditLockUI(){
+  const btn = document.getElementById("editLockBtn");
+  if(editUnlocked){
+    btn.classList.add("primary");
+    btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.4-2"/></svg>Editing unlocked \u2014 tap to lock';
+  } else {
+    btn.classList.remove("primary");
+    btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>Unlock editing';
+  }
+}
+
+function toggleEditLock(){
+  if(editUnlocked){
+    editUnlocked = false;
+  } else {
+    if(!requestPasscode()) return;
+    editUnlocked = true;
+  }
+  updateEditLockUI();
+}
+
+let draggedCode = null;
+
+function attachDragHandlers(row, code){
+  const handle = row.querySelector(".drag-handle");
+  handle.setAttribute("draggable", "true");
+  handle.addEventListener("dragstart", (e)=>{
+    draggedCode = code;
+    row.classList.add("dragging");
+    e.dataTransfer.effectAllowed = "move";
+    try{ e.dataTransfer.setData("text/plain", code); }catch(err){}
+  });
+  handle.addEventListener("dragend", ()=>{
+    row.classList.remove("dragging");
+    document.querySelectorAll(".row.drag-over").forEach(r=>r.classList.remove("drag-over"));
+    draggedCode = null;
+  });
+  row.addEventListener("dragover", (e)=>{
+    if(!draggedCode || draggedCode === code) return;
+    e.preventDefault();
+    row.classList.add("drag-over");
+  });
+  row.addEventListener("dragleave", ()=>{
+    row.classList.remove("drag-over");
+  });
+  row.addEventListener("drop", async (e)=>{
+    e.preventDefault();
+    row.classList.remove("drag-over");
+    if(!draggedCode || draggedCode === code) return;
+    await handleReorder(draggedCode, code);
+  });
+}
+
+async function handleReorder(fromCode, toCode){
+  const fromIdx = items.findIndex(i => i.code === fromCode);
+  if(fromIdx === -1) { renderList(); return; }
+  const reordered = items.slice();
+  const [moved] = reordered.splice(fromIdx, 1);
+  const toIdx = reordered.findIndex(i => i.code === toCode);
+  reordered.splice(toIdx, 0, moved);
+  if(!checkPasscode()){ renderList(); return; }
+  items = reordered;
+  await persistChecklist();
+  renderList();
+}
+
+function onEditClick(e){
+  if(!checkPasscode()) return;
+  const code = e.currentTarget.dataset.code;
+  const row = document.querySelector('#listPanel .row[data-code="' + CSS.escape(code) + '"]');
+  const found = findItemRef(code);
+  if(!row || !found) return;
+  const viewEl = row.querySelector('[data-view]');
+  viewEl.innerHTML =
+    '<input type="text" class="edit-input" value="' + found.ref.text.replace(/"/g,"&quot;") + '">' +
+    '<div class="edit-actions">' +
+      '<button class="mini-btn save" data-save>Save</button>' +
+      '<button class="mini-btn" data-cancel>Cancel</button>' +
+    '</div>';
+  const input = viewEl.querySelector("input");
+  input.focus();
+  input.select();
+  viewEl.querySelector('[data-save]').addEventListener("click", ()=>onEditSave(code, input.value));
+  viewEl.querySelector('[data-cancel]').addEventListener("click", renderList);
+  input.addEventListener("keydown", (ev)=>{
+    if(ev.key === "Enter") onEditSave(code, input.value);
+    if(ev.key === "Escape") renderList();
+  });
+}
+
+async function onEditSave(code, newText){
+  const trimmed = newText.trim();
+  if(trimmed){
+    const found = findItemRef(code);
+    if(found) found.ref.text = trimmed;
+    await persistChecklist();
+  }
+  renderList();
+}
+
+async function onDeleteClick(e){
+  if(!checkPasscode()) return;
+  const code = e.currentTarget.dataset.code;
+  const found = findItemRef(code);
+  if(!found) return;
+  found.arr.splice(found.index, 1);
+  checks = checks.filter(c => c !== code);
+  await persistChecklist();
+  renderList();
+}
+
+function onAddSubClick(e){
+  const parentCode = e.currentTarget.dataset.code;
+  addSubItem(parentCode);
+}
+
+function nextSubCode(parentCode, kids){
+  let max = 0;
+  kids.forEach(kid=>{
+    const m = kid.code.match(/\.(\d+)$/);
+    if(m) max = Math.max(max, parseInt(m[1], 10));
+  });
+  return parentCode + "." + (max + 1);
+}
+
+async function addSubItem(parentCode){
+  const text = window.prompt("Describe the sub-item under this checklist item:");
+  if(!text || !text.trim()) return;
+  if(!checkPasscode()) return;
+  const parent = items.find(i => i.code === parentCode);
+  if(!parent) return;
+  const hadNoChildrenBefore = !parent.children || parent.children.length === 0;
+  if(!parent.children) parent.children = [];
+  const subCode = nextSubCode(parentCode, parent.children);
+  parent.children.push({ code: subCode, text: text.trim() });
+  if(hadNoChildrenBefore){
+    checks = checks.filter(c => c !== parentCode);
+  }
+  await persistChecklist();
+  renderList();
+}
+
+async function addItem(){
+  const input = document.getElementById("addInput");
+  const text = input.value.trim();
+  if(!text) return;
+  if(!checkPasscode()) return;
+  items.push({ code: nextCode(), text });
+  await persistChecklist();
+  input.value = "";
+  document.getElementById("addForm").classList.remove("open");
+  renderList();
+}
+
+function flattenLeafCodes(){
+  const leaves = [];
+  items.forEach(item=>{
+    const kids = item.children || [];
+    if(kids.length){
+      kids.forEach(kid => leaves.push(kid.code));
+    } else {
+      leaves.push(item.code);
+    }
+  });
+  return leaves;
+}
+
+function updateProgress(){
+  const leafCodes = flattenLeafCodes();
+  const total = leafCodes.length;
+  const done = checks.filter(c => leafCodes.includes(c)).length;
+  const pct = total ? Math.round((done/total)*100) : 0;
+  document.getElementById("progressFill").style.width = pct + "%";
+  document.getElementById("progressText").textContent = done + " / " + total + " complete" + (currentSessionId ? "" : " (select an employee to start checking items)");
+}
+
+function flattenForOutput(){
+  const out = [];
+  items.forEach(item=>{
+    const kids = item.children || [];
+    if(kids.length){
+      out.push({ code: item.code, text: item.text, checked: false, isSub: false, isHeader: true, note: "" });
+      kids.forEach(kid => out.push({ code: kid.code, text: kid.text, checked: checks.includes(kid.code), isSub: true, isHeader: false, note: notes[kid.code] || "" }));
+    } else {
+      out.push({ code: item.code, text: item.text, checked: checks.includes(item.code), isSub: false, isHeader: false, note: notes[item.code] || "" });
+    }
+  });
+  return out;
+}
+
+function normalizeFlatItem(entry){
+  if(Array.isArray(entry)){
+    return { code: entry[0], text: entry[1], checked: entry[2], isSub: entry[3], isHeader: entry[4], note: entry[5] };
+  }
+  return entry;
+}
+
+/* ---------- Dashboard / Employee records ---------- */
+
+function formatSavedAt(ts){
+  if(!ts || !ts.toDate) return "\u2014";
+  const d = ts.toDate();
+  return d.toLocaleDateString() + " " + d.toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"});
+}
+
+async function refreshTemplatesCache(){
+  if(!firebaseReady) return;
+  const combos = [["admin","newjoiner"],["admin","exit"],["admin","intern"],["it","newjoiner"],["it","exit"],["it","intern"]];
+  for(const [d,t] of combos){
+    try{
+      const snap = await db.collection("checklists").doc(d + "_" + t).get();
+      templatesCache[d + "_" + t] = (snap.exists && snap.data().items) ? snap.data().items : DEFAULT_DATA[d].lists[t];
+    }catch(e){
+      templatesCache[d + "_" + t] = DEFAULT_DATA[d].lists[t];
+    }
+  }
+}
+
+function leafCountFor(dept, type){
+  const tmpl = templatesCache[dept + "_" + type] || DEFAULT_DATA[dept].lists[type];
+  let count = 0;
+  tmpl.forEach(item=>{
+    const kids = item.children || [];
+    count += kids.length ? kids.length : 1;
+  });
+  return count;
+}
+
+function recordProgress(rec){
+  const status = rec.status || "completed";
+  if(status === "completed" && rec.items){
+    const normalized = rec.items.map(normalizeFlatItem);
+    const leaves = normalized.filter(i => !i.isHeader);
+    const total = leaves.length;
+    const done = leaves.filter(i => i.checked).length;
+    return total ? Math.round((done/total)*100) : 0;
+  }
+  const total = leafCountFor(rec.dept, rec.type);
+  const done = (rec.checks || []).length;
+  return total ? Math.min(100, Math.round((done/total)*100)) : 0;
+}
+
+function renderRecords(){
+  const list = document.getElementById("recordsList");
+  const filtered = records.filter(r=>{
+    if(filters.dept !== "all" && r.dept !== filters.dept) return false;
+    if(filters.type !== "all" && r.type !== filters.type) return false;
+    const status = r.status || "completed";
+    if(filters.status !== "all" && status !== filters.status) return false;
+    if(filters.search && !(r.employeeName || "").toLowerCase().includes(filters.search.toLowerCase())) return false;
+    return true;
+  });
+  if(!filtered.length){
+    list.innerHTML = '<div class="empty-state">No records match these filters yet.</div>';
+    return;
+  }
+  let html = '<table class="records-table"><thead><tr>' +
+    '<th>Employee</th><th>Department</th><th>Type</th><th>Status</th><th>Progress</th><th>Date</th><th>Updated</th>' +
+    '</tr></thead><tbody>';
+  filtered.forEach(r=>{
+    const status = r.status || "completed";
+    const updated = r.updatedAt || r.completedAt || r.savedAt || r.createdAt;
+    html += '<tr class="rec-row" data-id="' + r.id + '">' +
+      '<td>' + escapeHtml(r.employeeName || "") + '</td>' +
+      '<td><span class="pill ' + r.dept + '">' + DEFAULT_DATA[r.dept].label + '</span></td>' +
+      '<td>' + TYPE_LABELS[r.type] + '</td>' +
+      '<td><span class="status-pill ' + status + '">' + (status === "active" ? "Active" : "Completed") + '</span></td>' +
+      '<td>' + recordProgress(r) + '%</td>' +
+      '<td>' + (r.date || "\u2014") + '</td>' +
+      '<td>' + formatSavedAt(updated) + '</td>' +
+      '</tr>';
+  });
+  html += '</tbody></table>';
+  list.innerHTML = html;
+  list.querySelectorAll(".rec-row").forEach(tr=>{
+    tr.addEventListener("click", ()=> openRecord(tr.dataset.id));
+  });
+}
+
+function openRecord(id){
+  const rec = records.find(r => r.id === id);
+  if(!rec) return;
+  const status = rec.status || "completed";
+  if(status === "active"){
+    const ok = confirm("Resume the checklist for " + (rec.employeeName || "this employee") + "?");
+    if(!ok) return;
+    state.dept = rec.dept;
+    state.type = rec.type;
+    renderTabs();
+    subscribeTemplate();
+    openSession(id);
+    setView("checklist");
+  } else {
+    selectedRecord = rec;
+    detailEditMode = false;
+    setView("recordDetail");
+  }
+}
+
+function metaField(label, value){
+  return '<div><label>' + label + '</label><input type="text" value="' + escapeHtml(value || "\u2014") + '" readonly></div>';
+}
+
+function metaFieldEditable(label, id, value, type){
+  return '<div><label>' + label + '</label><input type="' + (type || "text") + '" id="' + id + '" value="' + escapeHtml(value || "") + '"></div>';
+}
+
+function renderRecordDetail(){
+  const r = selectedRecord;
+  if(!r) return;
+  const status = r.status || "completed";
+  const metaEl = document.getElementById("detailMeta");
+  metaEl.innerHTML = detailEditMode
+    ? metaFieldEditable("Employee name", "dName", r.employeeName) +
+      metaFieldEditable("Role / team", "dRole", r.role) +
+      metaFieldEditable("Date", "dDate", r.date, "date") +
+      metaFieldEditable("Prepared by", "dPrep", r.preparedBy) +
+      metaField("Checklist", DEFAULT_DATA[r.dept].label + " \u2014 " + TYPE_LABELS[r.type])
+    : metaField("Employee name", r.employeeName) +
+      metaField("Role / team", r.role) +
+      metaField("Date", r.date) +
+      metaField("Prepared by", r.preparedBy) +
+      metaField("Checklist", DEFAULT_DATA[r.dept].label + " \u2014 " + TYPE_LABELS[r.type]);
+
+  const list = document.getElementById("detailList");
+  list.innerHTML = "";
+  (r.items || []).map(normalizeFlatItem).forEach(({code, text, checked, isSub, isHeader, note})=>{
+    const row = document.createElement("div");
+    row.className = "row" + (checked ? " checked" : "") + (isSub ? " sub-row" : "") + (isHeader ? " parent-header" : "");
+    const checkboxHTML = isHeader ? '<div class="checkbox-slot"></div>' : '<input type="checkbox" disabled ' + (checked ? "checked" : "") + '>';
+    row.innerHTML =
+      '<div></div>' + checkboxHTML +
+      '<div class="code">' + code + '</div>' +
+      '<div class="item-cell"><div class="item-text">' + escapeHtml(text) + '</div>' +
+      (note ? '<div class="note-preview">' + escapeHtml(note) + '</div>' : '') +
+      '</div><div></div>';
+    list.appendChild(row);
+  });
+
+  const actions = document.getElementById("detailActions");
+  let btns = "";
+  if(detailEditMode){
+    btns += '<button class="btn primary" id="saveDetailsBtn">Save changes</button>';
+    btns += '<button class="btn" id="cancelDetailsBtn">Cancel</button>';
+  } else {
+    btns += '<button class="btn" id="editDetailsBtn">Edit details</button>';
+    if(status === "completed"){
+      btns += '<button class="btn" id="reopenBtn">Reopen for editing</button>';
+    }
+    btns += '<button class="btn" id="deleteRecordBtn">Delete record</button>';
+    btns += '<button class="btn primary" onclick="window.print()">' +
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2M6 14h12v8H6z"/></svg>' +
+      'Print this record</button>';
+  }
+  actions.innerHTML = btns;
+
+  if(detailEditMode){
+    document.getElementById("saveDetailsBtn").addEventListener("click", saveDetailEdits);
+    document.getElementById("cancelDetailsBtn").addEventListener("click", ()=>{ detailEditMode = false; renderRecordDetail(); });
+  } else {
+    document.getElementById("editDetailsBtn").addEventListener("click", ()=>{ detailEditMode = true; renderRecordDetail(); });
+    if(status === "completed"){
+      document.getElementById("reopenBtn").addEventListener("click", reopenRecord);
+    }
+    document.getElementById("deleteRecordBtn").addEventListener("click", deleteRecord);
+  }
+}
+
+async function saveDetailEdits(){
+  if(!checkPasscode()) return;
+  const updated = {
+    employeeName: document.getElementById("dName").value.trim(),
+    role: document.getElementById("dRole").value.trim(),
+    date: document.getElementById("dDate").value,
+    preparedBy: document.getElementById("dPrep").value.trim(),
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+  };
+  try{
+    await db.collection("records").doc(selectedRecord.id).update(updated);
+    Object.assign(selectedRecord, updated);
+    detailEditMode = false;
+    renderRecordDetail();
+  }catch(e){
+    console.error(e);
+    alert("Could not save changes.");
+  }
+}
+
+async function reopenRecord(){
+  if(!checkPasscode()) return;
+  const ok = confirm("Reopen this checklist for further editing? It will move back to Active.");
+  if(!ok) return;
+  try{
+    await db.collection("records").doc(selectedRecord.id).update({
+      status: "active",
+      completedAt: null,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    const id = selectedRecord.id;
+    const rec = records.find(r => r.id === id) || selectedRecord;
+    state.dept = rec.dept;
+    state.type = rec.type;
+    renderTabs();
+    await subscribeTemplate();
+    openSession(id);
+    setView("checklist");
+  }catch(e){
+    console.error(e);
+    alert("Could not reopen this record.");
+  }
+}
+
+async function deleteRecord(){
+  if(!checkPasscode()) return;
+  const ok = confirm("Permanently delete this record for " + (selectedRecord.employeeName || "this employee") + "? This cannot be undone.");
+  if(!ok) return;
+  try{
+    await db.collection("records").doc(selectedRecord.id).delete();
+    selectedRecord = null;
+    setView("records");
+  }catch(e){
+    console.error(e);
+    alert("Could not delete this record.");
+  }
+}
+
+function serializeForExport(obj){
+  const out = { ...obj };
+  ["createdAt","updatedAt","completedAt","savedAt"].forEach(k=>{
+    if(out[k] && out[k].toDate) out[k] = out[k].toDate().toISOString();
+  });
+  return out;
+}
+
+async function exportAllData(){
+  if(!firebaseReady){ alert("Firebase isn't configured yet, so there's nothing to export."); return; }
+  const btn = document.getElementById("exportBtn");
+  const originalHTML = btn.innerHTML;
+  btn.innerHTML = "Exporting\u2026";
+  try{
+    const combos = [["admin","newjoiner"],["admin","exit"],["admin","intern"],["it","newjoiner"],["it","exit"],["it","intern"]];
+    const templates = {};
+    for(const [d,t] of combos){
+      const snap = await db.collection("checklists").doc(d + "_" + t).get();
+      templates[d + "_" + t] = snap.exists ? snap.data() : { items: DEFAULT_DATA[d].lists[t] };
+    }
+    const recSnap = await db.collection("records").get();
+    const allRecords = recSnap.docs.map(d => serializeForExport({ id: d.id, ...d.data() }));
+    const payload = {
+      exportedAt: new Date().toISOString(),
+      templates,
+      records: allRecords
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "synergy-checklist-backup-" + new Date().toISOString().slice(0,10) + ".json";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }catch(e){
+    console.error(e);
+    alert("Export failed. Check your Firebase setup.");
+  }finally{
+    btn.innerHTML = originalHTML;
+  }
+}
+
+/* ---------- Printing ---------- */
+
+function buildPrintArea(){
+  let title, name, role, date, prep, itemsWithChecked;
+  if(view === "recordDetail" && selectedRecord){
+    const r = selectedRecord;
+    title = DEFAULT_DATA[r.dept].label + " checklist \u2014 " + TYPE_LABELS[r.type];
+    name = r.employeeName; role = r.role; date = r.date; prep = r.preparedBy;
+    itemsWithChecked = r.items || [];
+  } else {
+    title = DEFAULT_DATA[state.dept].label + " checklist \u2014 " + TYPE_LABELS[state.type];
+    name = document.getElementById("mName").value;
+    role = document.getElementById("mRole").value;
+    date = document.getElementById("mDate").value;
+    prep = document.getElementById("mPrep").value;
+    itemsWithChecked = flattenForOutput();
+  }
+  document.getElementById("pTitle").textContent = title;
+  document.getElementById("pSub").textContent = "Onboarding & exit checklist";
+  document.getElementById("pName").textContent = name || "\u2014";
+  document.getElementById("pRole").textContent = role || "\u2014";
+  document.getElementById("pDate").textContent = date || "\u2014";
+  document.getElementById("pPrep").textContent = prep || "\u2014";
+  const pList = document.getElementById("pList");
+  pList.innerHTML = "";
+  itemsWithChecked.map(normalizeFlatItem).forEach(({code, text, checked, isSub, isHeader, note})=>{
+    const row = document.createElement("div");
+    row.className = "p-row" + (isSub ? " p-sub" : "") + (isHeader ? " p-header" : "");
+    const boxHTML = isHeader ? '<div></div>' : '<div class="p-box' + (checked ? " on" : "") + '"></div>';
+    row.innerHTML = boxHTML + '<div class="p-code">' + code + '</div><div>' + escapeHtml(text) +
+      (note ? '<div class="p-note">' + escapeHtml(note) + '</div>' : '') + '</div>';
+    pList.appendChild(row);
+  });
+}
+
+/* ---------- View switching ---------- */
+
+function setView(next){
+  view = next;
+  document.querySelectorAll(".view-tab").forEach(t=>{
+    t.classList.toggle("active", t.dataset.view === (next === "recordDetail" ? "records" : next));
+  });
+  document.getElementById("checklistView").style.display = next === "checklist" ? "block" : "none";
+  document.getElementById("checklistActions").style.display = next === "checklist" ? "flex" : "none";
+  document.getElementById("recordsView").style.display = next === "records" ? "block" : "none";
+  document.getElementById("recordDetailView").style.display = next === "recordDetail" ? "block" : "none";
+  if(next === "records"){
+    renderRecords();
+    refreshTemplatesCache().then(renderRecords);
+  }
+  if(next === "recordDetail"){
+    detailEditMode = false;
+    renderRecordDetail();
+  }
+}
+
+document.getElementById("deptTabs").addEventListener("click", (e)=>{
+  const btn = e.target.closest(".dept-tab");
+  if(!btn) return;
+  state.dept = btn.dataset.dept;
+  switchDeptType();
+});
+
+document.getElementById("typeTabs").addEventListener("click", (e)=>{
+  const btn = e.target.closest(".type-tab");
+  if(!btn) return;
+  state.type = btn.dataset.type;
+  switchDeptType();
+});
+
+document.querySelectorAll(".view-tab").forEach(btn=>{
+  btn.addEventListener("click", ()=> setView(btn.dataset.view));
+});
+
+document.getElementById("backToRecords").addEventListener("click", ()=> setView("records"));
+
+document.getElementById("addToggle").addEventListener("click", ()=>{
+  document.getElementById("addForm").classList.add("open");
+  document.getElementById("addInput").focus();
+});
+document.getElementById("addCancel").addEventListener("click", ()=>{
+  document.getElementById("addForm").classList.remove("open");
+  document.getElementById("addInput").value = "";
+});
+document.getElementById("addSave").addEventListener("click", addItem);
+document.getElementById("addInput").addEventListener("keydown", (e)=>{ if(e.key === "Enter") addItem(); });
+
+document.getElementById("editLockBtn").addEventListener("click", toggleEditLock);
+
+document.getElementById("saveRecordBtn").addEventListener("click", markComplete);
+
+document.getElementById("filterDept").addEventListener("change", (e)=>{ filters.dept = e.target.value; renderRecords(); });
+document.getElementById("filterType").addEventListener("change", (e)=>{ filters.type = e.target.value; renderRecords(); });
+document.getElementById("filterStatus").addEventListener("change", (e)=>{ filters.status = e.target.value; renderRecords(); });
+document.getElementById("filterSearch").addEventListener("input", (e)=>{ filters.search = e.target.value; renderRecords(); });
+document.getElementById("exportBtn").addEventListener("click", exportAllData);
+
+["mName","mRole","mDate","mPrep"].forEach(id=>{
+  document.getElementById(id).addEventListener("change", ()=>{ persistSessionState(); renderSessionBar(); });
+});
+
+document.getElementById("loginBtn").addEventListener("click", doLogin);
+document.getElementById("loginPasscode").addEventListener("keydown", (e)=>{ if(e.key === "Enter") doLogin(); });
+document.getElementById("signOutBtn").addEventListener("click", lockScreen);
+
+window.addEventListener("beforeprint", buildPrintArea);
+
+const APP_PASSCODE = "3230";
+
+function doLogin(){
+  const entered = document.getElementById("loginPasscode").value;
+  const errEl = document.getElementById("loginError");
+  if(entered === APP_PASSCODE){
+    errEl.classList.remove("show");
+    sessionStorage.setItem("checklist-unlocked", "1");
+    showApp();
+  } else {
+    errEl.classList.add("show");
+  }
+}
+
+function lockScreen(){
+  if(unsubTemplate) unsubTemplate();
+  if(unsubRecords) unsubRecords();
+  if(unsubSession) unsubSession();
+  sessionStorage.removeItem("checklist-unlocked");
+  editUnlocked = false;
+  currentSessionId = null;
+  updateEditLockUI();
+  document.getElementById("appWrap").style.display = "none";
+  document.getElementById("loginOverlay").style.display = "flex";
+  document.getElementById("loginPasscode").value = "";
+}
+
+async function showApp(){
+  document.getElementById("loginOverlay").style.display = "none";
+  document.getElementById("appWrap").style.display = "block";
+  updateEditLockUI();
+  setView("checklist");
+  renderTabs();
+  await subscribeTemplate();
+  if(firebaseReady) subscribeAllRecords();
+}
+
+(function init(){
+  firebaseReady = initFirebase();
+  if(sessionStorage.getItem("checklist-unlocked") === "1"){
+    showApp();
+  }
+})();
+</script>
+</body>
+</html>
